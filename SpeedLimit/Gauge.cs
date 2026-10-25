@@ -8,9 +8,19 @@ namespace SpeedLimit;
 public sealed class Gauge : FrameworkElement
 {
     const double Sweep = 240, Thickness = 8;
-    static readonly Pen TrackPen = RateGraph.Frozen(new Pen(RateGraph.Frozen(new SolidColorBrush(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF))), Thickness) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round });
-    static readonly Pen ValuePen = RateGraph.Frozen(new Pen(RateGraph.Frozen(new LinearGradientBrush(RateGraph.DownColor, RateGraph.UpColor, 0)), Thickness) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round });
-    static readonly Brush CaptionBrush = RateGraph.Frozen(new SolidColorBrush(Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF)));
+    static Pen TrackPen = null!, ValuePen = null!;
+    static Brush CaptionBrush = null!, TextBrush = null!;
+
+    static Gauge() => SetTheme(Theme.All[0]);
+
+    public static void SetTheme(Theme t)
+    {
+        static Pen Round(Brush b) => RateGraph.Frozen(new Pen(RateGraph.Frozen(b), Thickness) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round });
+        TrackPen = Round(new SolidColorBrush(Theme.WithAlpha(t.Ink, 0x30)));
+        ValuePen = Round(new LinearGradientBrush(t.Down, t.Up, 0));
+        CaptionBrush = RateGraph.Frozen(new SolidColorBrush(Theme.WithAlpha(t.Ink, 0x99)));
+        TextBrush = RateGraph.Frozen(new SolidColorBrush(t.Ink));
+    }
 
     public static readonly DependencyProperty ValueProperty = DependencyProperty.Register(
         nameof(Value), typeof(double), typeof(Gauge), new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
@@ -41,7 +51,7 @@ public sealed class Gauge : FrameworkElement
         var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
         var size = Math.Clamp(r / 2.75, 14, 34); // großer Tacho im Speedtest, kleiner unter dem Graphen
         var value = new FormattedText(Label ?? AppRow.FormatRate(Value), CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
-            new Typeface(new FontFamily("Segoe UI Variable Display, Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal), size, Brushes.White, dpi);
+            new Typeface(new FontFamily("Segoe UI Variable Display, Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal), size, TextBrush, dpi);
         var caption = new FormattedText(Caption, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), size * 0.6, CaptionBrush, dpi);
         dc.DrawText(caption, new Point(center.X - caption.Width / 2, center.Y - value.Height / 2 - caption.Height));
         dc.DrawText(value, new Point(center.X - value.Width / 2, center.Y - value.Height / 2 + 2));

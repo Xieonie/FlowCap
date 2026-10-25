@@ -11,6 +11,8 @@ public sealed class Settings
     public Dictionary<string, Limit> Limits { get; set; } = [];
     /// <summary>Limit für alle Programme zusammen.</summary>
     public Limit TotalLimit { get; set; }
+    /// <summary>Id des Farbschemas (siehe <see cref="SpeedLimit.Theme.All"/>).</summary>
+    public string Theme { get; set; } = "graphit";
     /// <summary>Raten in Mbit/s statt KB/s anzeigen.</summary>
     public bool UseBits { get; set; }
     /// <summary>Zeitraum des großen Graphen: 60, 300 oder 900 Sekunden.</summary>

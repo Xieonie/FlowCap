@@ -3,15 +3,27 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:SpeedLimit"
         Title="FlowCap" Width="1180" Height="860" MinWidth="960" MinHeight="640"
-        WindowStartupLocation="CenterScreen" Foreground="White" PreviewKeyDown="Window_PreviewKeyDown">
-    <!-- Farbschema "Graphit + Neon" -->
-    <Window.Background>
-        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+        WindowStartupLocation="CenterScreen" Foreground="{DynamicResource Ink}" Background="{DynamicResource WindowBg}"
+        PreviewKeyDown="Window_PreviewKeyDown">
+    <Window.Resources>
+        <!-- Farben/Formen des Themes: Standardwerte = "Graphit Neon", MainWindow.ApplyTheme ersetzt sie zur Laufzeit -->
+        <LinearGradientBrush x:Key="WindowBg" StartPoint="0,0" EndPoint="1,1">
             <GradientStop Color="#0B0B0F" Offset="0" />
             <GradientStop Color="#16161D" Offset="1" />
         </LinearGradientBrush>
-    </Window.Background>
-    <Window.Resources>
+        <SolidColorBrush x:Key="Ink" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="Hairline" Color="#00000000" />
+        <SolidColorBrush x:Key="Hover" Color="#14FFFFFF" />
+        <SolidColorBrush x:Key="SelectionBg" Color="#1A00E5FF" />
+        <SolidColorBrush x:Key="SelectionBorder" Color="#8000E5FF" />
+        <SolidColorBrush x:Key="AccentSoft" Color="#2600E5FF" />
+        <SolidColorBrush x:Key="UpSoft" Color="#33A3FF12" />
+        <SolidColorBrush x:Key="OnAccent" Color="#0B0B0F" />
+        <SolidColorBrush x:Key="DangerSoft" Color="#40FF4D6D" />
+        <SolidColorBrush x:Key="Scrim" Color="#B3000000" />
+        <SolidColorBrush x:Key="Dialog" Color="#1B1B23" />
+        <SolidColorBrush x:Key="DialogBorder" Color="#24FFFFFF" />
+        <CornerRadius x:Key="CardRadius">12</CornerRadius>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
         <FontFamily x:Key="Icons">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
         <SolidColorBrush x:Key="DownBrush" Color="#00E5FF" />
@@ -29,15 +41,17 @@
 
         <Style x:Key="Caption" TargetType="TextBlock">
             <Setter Property="FontSize" Value="12" />
-            <Setter Property="Foreground" Value="{StaticResource Muted}" />
+            <Setter Property="Foreground" Value="{DynamicResource Muted}" />
         </Style>
         <Style x:Key="Section" TargetType="TextBlock" BasedOn="{StaticResource Caption}">
             <Setter Property="Margin" Value="0,22,0,8" />
             <Setter Property="FontWeight" Value="SemiBold" />
         </Style>
         <Style x:Key="Card" TargetType="Border">
-            <Setter Property="CornerRadius" Value="12" />
-            <Setter Property="Background" Value="{StaticResource Panel}" />
+            <Setter Property="CornerRadius" Value="{DynamicResource CardRadius}" />
+            <Setter Property="Background" Value="{DynamicResource Panel}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Hairline}" />
+            <Setter Property="BorderThickness" Value="1" />
         </Style>
         <Style x:Key="Pill" TargetType="RadioButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
             <Setter Property="Height" Value="32" />
@@ -73,14 +87,14 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bg" Property="Background" Value="#14FFFFFF" />
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource Hover}" />
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Bg" Property="Background" Value="#1A00E5FF" />
-                                <Setter TargetName="Bg" Property="BorderBrush" Value="#8000E5FF" />
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource SelectionBg}" />
+                                <Setter TargetName="Bg" Property="BorderBrush" Value="{DynamicResource SelectionBorder}" />
                             </Trigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="Bg" Property="BorderBrush" Value="White" />
+                                <Setter TargetName="Bg" Property="BorderBrush" Value="{DynamicResource Ink}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -96,12 +110,12 @@
         <!-- Download-/Upload-Limit mit Schieberegler; DataContext = AppRow (Programm oder Gesamtlimit) -->
         <DataTemplate x:Key="LimitEditor">
             <StackPanel>
-                <Border Padding="14" CornerRadius="10" Background="{StaticResource PanelInner}">
+                <Border Padding="14" CornerRadius="10" Background="{DynamicResource PanelInner}">
                     <StackPanel>
                         <DockPanel>
-                            <CheckBox DockPanel.Dock="Right" Content="Begrenzen" IsChecked="{Binding DownLimited}" MinWidth="0" Foreground="White" />
+                            <CheckBox DockPanel.Dock="Right" Content="Begrenzen" IsChecked="{Binding DownLimited}" MinWidth="0" Foreground="{DynamicResource Ink}" />
                             <TextBlock VerticalAlignment="Center" FontWeight="SemiBold">
-                                <Run FontFamily="{StaticResource Icons}" Text="&#xE74B;" Foreground="{StaticResource DownBrush}" /> Download
+                                <Run FontFamily="{StaticResource Icons}" Text="&#xE74B;" Foreground="{DynamicResource DownBrush}" /> Download
                             </TextBlock>
                         </DockPanel>
                         <TextBlock Text="{Binding LimitDownText}" FontSize="24" FontWeight="SemiBold" Margin="0,8,0,4" />
@@ -115,12 +129,12 @@
                         </WrapPanel>
                     </StackPanel>
                 </Border>
-                <Border Margin="0,12,0,0" Padding="14" CornerRadius="10" Background="{StaticResource PanelInner}">
+                <Border Margin="0,12,0,0" Padding="14" CornerRadius="10" Background="{DynamicResource PanelInner}">
                     <StackPanel>
                         <DockPanel>
-                            <CheckBox DockPanel.Dock="Right" Content="Begrenzen" IsChecked="{Binding UpLimited}" MinWidth="0" Foreground="White" />
+                            <CheckBox DockPanel.Dock="Right" Content="Begrenzen" IsChecked="{Binding UpLimited}" MinWidth="0" Foreground="{DynamicResource Ink}" />
                             <TextBlock VerticalAlignment="Center" FontWeight="SemiBold">
-                                <Run FontFamily="{StaticResource Icons}" Text="&#xE74A;" Foreground="{StaticResource UpBrush}" /> Upload
+                                <Run FontFamily="{StaticResource Icons}" Text="&#xE74A;" Foreground="{DynamicResource UpBrush}" /> Upload
                             </TextBlock>
                         </DockPanel>
                         <TextBlock Text="{Binding LimitUpText}" FontSize="24" FontWeight="SemiBold" Margin="0,8,0,4" />
@@ -148,9 +162,9 @@
             <!-- Kopfzeile: Titel, Reiter, Pause, Einstellungen -->
             <DockPanel Grid.Row="0" Margin="2,0,2,14">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Border x:Name="ScheduleBadge" CornerRadius="13" Padding="10,4" Margin="0,0,8,0" Background="#2600E5FF" VerticalAlignment="Center"
+                    <Border x:Name="ScheduleBadge" CornerRadius="13" Padding="10,4" Margin="0,0,8,0" Background="{DynamicResource AccentSoft}" VerticalAlignment="Center"
                             Visibility="Collapsed" ToolTip="Das Profil wurde von einem Zeitplan gewählt">
-                        <TextBlock FontSize="12"><Run FontFamily="{StaticResource Icons}" Text="&#xE823;" Foreground="{StaticResource Accent}" /> Zeitplan</TextBlock>
+                        <TextBlock FontSize="12"><Run FontFamily="{StaticResource Icons}" Text="&#xE823;" Foreground="{DynamicResource Accent}" /> Zeitplan</TextBlock>
                     </Border>
                     <TextBlock Text="Profil" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="0,0,8,0" />
                     <ComboBox x:Name="ProfileBox" MinWidth="150" Height="34" VerticalAlignment="Center" SelectionChanged="ProfileBox_SelectionChanged"
@@ -189,21 +203,21 @@
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
                         <DockPanel Margin="0,0,0,8">
-                            <Border DockPanel.Dock="Right" CornerRadius="13" Padding="12,4" Background="{StaticResource PanelInner}">
+                            <Border DockPanel.Dock="Right" CornerRadius="13" Padding="12,4" Background="{DynamicResource PanelInner}">
                                 <TextBlock FontSize="12">
                                     <Run FontFamily="{StaticResource Icons}" Text="&#xE72E;" /> <Run x:Name="LimitedCount" FontWeight="SemiBold" /> eingeschränkt
                                 </TextBlock>
                             </Border>
-                            <Border DockPanel.Dock="Right" CornerRadius="13" Padding="12,4" Margin="0,0,8,0" Background="{StaticResource PanelInner}"
+                            <Border DockPanel.Dock="Right" CornerRadius="13" Padding="12,4" Margin="0,0,8,0" Background="{DynamicResource PanelInner}"
                                     ToolTip="Ping zu Cloudflare (1.1.1.1), alle 5 Sekunden">
                                 <TextBlock FontSize="12">
-                                    <Run FontFamily="{StaticResource Icons}" Text="&#xEC05;" Foreground="{StaticResource Accent}" /> Ping <Run x:Name="PingText" FontWeight="SemiBold" Text="…" />
+                                    <Run FontFamily="{StaticResource Icons}" Text="&#xEC05;" Foreground="{DynamicResource Accent}" /> Ping <Run x:Name="PingText" FontWeight="SemiBold" Text="…" />
                                 </TextBlock>
                             </Border>
                             <Border x:Name="GameModePill" DockPanel.Dock="Right" CornerRadius="13" Padding="12,4" Margin="0,0,8,0"
-                                    Background="#33A3FF12" Visibility="Collapsed">
+                                    Background="{DynamicResource UpSoft}" Visibility="Collapsed">
                                 <TextBlock FontSize="12">
-                                    <Run FontFamily="{StaticResource Icons}" Text="&#xE7FC;" Foreground="{StaticResource UpBrush}" /> <Run x:Name="GameModeText" FontWeight="SemiBold" />
+                                    <Run FontFamily="{StaticResource Icons}" Text="&#xE7FC;" Foreground="{DynamicResource UpBrush}" /> <Run x:Name="GameModeText" FontWeight="SemiBold" />
                                 </TextBlock>
                             </Border>
                             <TextBlock x:Name="GraphTitle" Style="{StaticResource Caption}" VerticalAlignment="Center" />
@@ -222,14 +236,14 @@
                             <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,20,0">
                                 <TextBlock HorizontalAlignment="Right">
                                     <Run x:Name="CurrentDown" FontSize="22" FontWeight="SemiBold" />
-                                    <Run FontFamily="{StaticResource Icons}" Text="&#xE74B;" FontSize="16" Foreground="{StaticResource DownBrush}" />
+                                    <Run FontFamily="{StaticResource Icons}" Text="&#xE74B;" FontSize="16" Foreground="{DynamicResource DownBrush}" />
                                 </TextBlock>
                                 <TextBlock Text="Download" Style="{StaticResource Caption}" HorizontalAlignment="Right" Margin="0,0,22,0" />
                             </StackPanel>
                             <local:Gauge x:Name="TotalGauge" Grid.Column="2" Width="150" Height="92" />
                             <StackPanel Grid.Column="3" VerticalAlignment="Center" Margin="20,0,0,0">
                                 <TextBlock>
-                                    <Run FontFamily="{StaticResource Icons}" Text="&#xE74A;" FontSize="16" Foreground="{StaticResource UpBrush}" />
+                                    <Run FontFamily="{StaticResource Icons}" Text="&#xE74A;" FontSize="16" Foreground="{DynamicResource UpBrush}" />
                                     <Run x:Name="CurrentUp" FontSize="22" FontWeight="SemiBold" />
                                 </TextBlock>
                                 <TextBlock Text="Upload" Style="{StaticResource Caption}" Margin="22,0,0,0" />
@@ -262,9 +276,9 @@
                                     <TextBox x:Name="SearchBox" Padding="34,0,10,0" VerticalContentAlignment="Center" Height="34"
                                              TextChanged="Search_Changed" AutomationProperties.Name="Programm suchen" />
                                     <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE721;" Margin="11,0,0,0" VerticalAlignment="Center"
-                                               IsHitTestVisible="False" Foreground="{StaticResource Muted}" />
+                                               IsHitTestVisible="False" Foreground="{DynamicResource Muted}" />
                                     <TextBlock Text="Programm suchen…" Margin="35,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False"
-                                               Foreground="{StaticResource Muted}">
+                                               Foreground="{DynamicResource Muted}">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
                                                 <Setter Property="Visibility" Value="Collapsed" />
@@ -321,19 +335,19 @@
                                                         Visibility="{Binding HasBadge, Converter={StaticResource BoolToVis}}">
                                                     <Border.Style>
                                                         <Style TargetType="Border">
-                                                            <Setter Property="Background" Value="{StaticResource Accent}" />
+                                                            <Setter Property="Background" Value="{DynamicResource Accent}" />
                                                             <Style.Triggers>
                                                                 <DataTrigger Binding="{Binding IsBlocked}" Value="True">
-                                                                    <Setter Property="Background" Value="{StaticResource Danger}" />
+                                                                    <Setter Property="Background" Value="{DynamicResource Danger}" />
                                                                 </DataTrigger>
                                                             </Style.Triggers>
                                                         </Style>
                                                     </Border.Style>
-                                                    <TextBlock Text="{Binding Badge}" FontSize="11" FontWeight="SemiBold" Foreground="#0B0B0F" />
+                                                    <TextBlock Text="{Binding Badge}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource OnAccent}" />
                                                 </Border>
                                             </StackPanel>
-                                            <TextBlock Grid.Column="2" Text="{Binding DownText}" Foreground="{StaticResource DownBrush}" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                            <TextBlock Grid.Column="3" Text="{Binding UpText}" Foreground="{StaticResource UpBrush}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="2" Text="{Binding DownText}" Foreground="{DynamicResource DownBrush}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="3" Text="{Binding UpText}" Foreground="{DynamicResource UpBrush}" FontWeight="SemiBold" VerticalAlignment="Center" />
                                             <local:RateGraph Grid.Column="4" Height="28" VerticalAlignment="Center" Down="{Binding DownRecent}" Up="{Binding UpRecent}" />
                                         </Grid>
                                     </DataTemplate>
@@ -356,9 +370,9 @@
                                         </Style.Triggers>
                                     </Style>
                                 </StackPanel.Style>
-                                <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE7C4;" FontSize="40" HorizontalAlignment="Center" Foreground="{StaticResource Muted}" />
-                                <TextBlock Text="Programm links auswählen," HorizontalAlignment="Center" Margin="0,12,0,0" Foreground="{StaticResource Muted}" />
-                                <TextBlock Text="um es zu drosseln oder zu sperren." HorizontalAlignment="Center" Foreground="{StaticResource Muted}" />
+                                <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE7C4;" FontSize="40" HorizontalAlignment="Center" Foreground="{DynamicResource Muted}" />
+                                <TextBlock Text="Programm links auswählen," HorizontalAlignment="Center" Margin="0,12,0,0" Foreground="{DynamicResource Muted}" />
+                                <TextBlock Text="um es zu drosseln oder zu sperren." HorizontalAlignment="Center" Foreground="{DynamicResource Muted}" />
                             </StackPanel>
 
                             <Grid>
@@ -378,8 +392,8 @@
                                         <StackPanel VerticalAlignment="Center">
                                             <TextBlock Text="{Binding Name}" FontSize="18" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                                             <TextBlock Style="{StaticResource Caption}">
-                                                <Run Text="↓" Foreground="{StaticResource DownBrush}" /> <Run Text="{Binding DownText, Mode=OneWay}" />
-                                                <Run Text="   ↑" Foreground="{StaticResource UpBrush}" /> <Run Text="{Binding UpText, Mode=OneWay}" />
+                                                <Run Text="↓" Foreground="{DynamicResource DownBrush}" /> <Run Text="{Binding DownText, Mode=OneWay}" />
+                                                <Run Text="   ↑" Foreground="{DynamicResource UpBrush}" /> <Run Text="{Binding UpText, Mode=OneWay}" />
                                             </TextBlock>
                                             <TextBlock Style="{StaticResource Caption}">
                                                 <Run Text="Heute:" /> <Run Text="{Binding UsageToday, Mode=OneWay}" />
@@ -391,10 +405,10 @@
                                     <Border Margin="0,18,0,12" Padding="14,10" CornerRadius="10">
                                         <Border.Style>
                                             <Style TargetType="Border">
-                                                <Setter Property="Background" Value="{StaticResource PanelInner}" />
+                                                <Setter Property="Background" Value="{DynamicResource PanelInner}" />
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding IsBlocked}" Value="True">
-                                                        <Setter Property="Background" Value="#40FF4D6D" />
+                                                        <Setter Property="Background" Value="{DynamicResource DangerSoft}" />
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
@@ -404,7 +418,7 @@
                                                       Margin="12,0,0,0" AutomationProperties.Name="Internet sperren" />
                                             <StackPanel VerticalAlignment="Center">
                                                 <TextBlock FontWeight="SemiBold">
-                                                    <Run FontFamily="{StaticResource Icons}" Text="&#xE72E;" Foreground="{StaticResource Danger}" /> Internet sperren
+                                                    <Run FontFamily="{StaticResource Icons}" Text="&#xE72E;" Foreground="{DynamicResource Danger}" /> Internet sperren
                                                 </TextBlock>
                                                 <TextBlock Text="Blockiert allen Datenverkehr dieses Programms" Style="{StaticResource Caption}" TextWrapping="Wrap" />
                                             </StackPanel>
@@ -417,13 +431,13 @@
                                             IsEnabled="{Binding IsLimited}" Click="ClearLimit_Click" />
 
                                     <!-- Datenlimit -->
-                                    <Border Margin="0,14,0,0" Padding="14" CornerRadius="10" Background="{StaticResource PanelInner}">
+                                    <Border Margin="0,14,0,0" Padding="14" CornerRadius="10" Background="{DynamicResource PanelInner}">
                                         <StackPanel>
                                             <DockPanel>
-                                                <CheckBox DockPanel.Dock="Right" Content="Aktiv" IsChecked="{Binding CapEnabled}" MinWidth="0" Foreground="White"
+                                                <CheckBox DockPanel.Dock="Right" Content="Aktiv" IsChecked="{Binding CapEnabled}" MinWidth="0" Foreground="{DynamicResource Ink}"
                                                           AutomationProperties.Name="Datenlimit aktiv" />
                                                 <TextBlock VerticalAlignment="Center" FontWeight="SemiBold">
-                                                    <Run FontFamily="{StaticResource Icons}" Text="&#xE9D2;" Foreground="{StaticResource Accent}" /> Datenlimit
+                                                    <Run FontFamily="{StaticResource Icons}" Text="&#xE9D2;" Foreground="{DynamicResource Accent}" /> Datenlimit
                                                 </TextBlock>
                                             </DockPanel>
                                             <StackPanel IsEnabled="{Binding CapEnabled}" Margin="0,10,0,0">
@@ -438,7 +452,7 @@
                                                     <ComboBox Grid.Column="2" ItemsSource="{x:Static local:AppRow.CapPeriodNames}" SelectedIndex="{Binding CapPeriodIndex}"
                                                               AutomationProperties.Name="Zeitraum" HorizontalAlignment="Stretch" />
                                                 </Grid>
-                                                <CheckBox Content="Bei Erreichen sperren" IsChecked="{Binding CapBlock}" Margin="0,8,0,0" Foreground="White" />
+                                                <CheckBox Content="Bei Erreichen sperren" IsChecked="{Binding CapBlock}" Margin="0,8,0,0" Foreground="{DynamicResource Ink}" />
                                                 <ProgressBar Minimum="0" Maximum="1" Value="{Binding CapShare, Mode=OneWay}" Height="6" Margin="0,10,0,4" />
                                                 <TextBlock Text="{Binding CapStatus}" Style="{StaticResource Caption}" />
                                             </StackPanel>
@@ -446,13 +460,13 @@
                                     </Border>
 
                                     <!-- Spielmodus-Vorrang -->
-                                    <Border Margin="0,12,0,0" Padding="14,10" CornerRadius="10" Background="{StaticResource PanelInner}">
+                                    <Border Margin="0,12,0,0" Padding="14,10" CornerRadius="10" Background="{DynamicResource PanelInner}">
                                         <DockPanel>
                                             <CheckBox DockPanel.Dock="Right" IsChecked="{Binding IsPriority}" MinWidth="0" VerticalAlignment="Center" Margin="12,0,0,0"
                                                       AutomationProperties.Name="Vorrang im Spielmodus" />
                                             <StackPanel VerticalAlignment="Center">
                                                 <TextBlock FontWeight="SemiBold">
-                                                    <Run FontFamily="{StaticResource Icons}" Text="&#xE7FC;" Foreground="{StaticResource UpBrush}" /> Vorrang im Spielmodus
+                                                    <Run FontFamily="{StaticResource Icons}" Text="&#xE7FC;" Foreground="{DynamicResource UpBrush}" /> Vorrang im Spielmodus
                                                 </TextBlock>
                                                 <TextBlock Text="Solange es läuft, werden alle anderen Programme gedrosselt" Style="{StaticResource Caption}" TextWrapping="Wrap" />
                                             </StackPanel>
@@ -460,10 +474,10 @@
                                     </Border>
 
                                     <!-- VPN -->
-                                    <Border Margin="0,12,0,0" Padding="14" CornerRadius="10" Background="{StaticResource PanelInner}">
+                                    <Border Margin="0,12,0,0" Padding="14" CornerRadius="10" Background="{DynamicResource PanelInner}">
                                         <StackPanel>
                                             <TextBlock FontWeight="SemiBold">
-                                                <Run FontFamily="{StaticResource Icons}" Text="&#xE705;" Foreground="{StaticResource UpBrush}" /> VPN (WireGuard)
+                                                <Run FontFamily="{StaticResource Icons}" Text="&#xE705;" Foreground="{DynamicResource UpBrush}" /> VPN (WireGuard)
                                             </TextBlock>
                                             <ComboBox ItemsSource="{Binding VpnChoices, RelativeSource={RelativeSource AncestorType=Window}}"
                                                       SelectedItem="{Binding VpnChoice}" HorizontalAlignment="Stretch" Margin="0,8,0,6"
@@ -475,10 +489,10 @@
                                     </Border>
 
                                     <!-- Proxy -->
-                                    <Border Margin="0,12,0,0" Padding="14" CornerRadius="10" Background="{StaticResource PanelInner}">
+                                    <Border Margin="0,12,0,0" Padding="14" CornerRadius="10" Background="{DynamicResource PanelInner}">
                                         <StackPanel>
                                             <TextBlock FontWeight="SemiBold">
-                                                <Run FontFamily="{StaticResource Icons}" Text="&#xE968;" Foreground="{StaticResource Accent}" /> Proxy
+                                                <Run FontFamily="{StaticResource Icons}" Text="&#xE968;" Foreground="{DynamicResource Accent}" /> Proxy
                                             </TextBlock>
                                             <ComboBox ItemsSource="{Binding ProxyChoices, RelativeSource={RelativeSource AncestorType=Window}}"
                                                       SelectedItem="{Binding ProxyChoice}" HorizontalAlignment="Stretch" Margin="0,8,0,6"
@@ -493,7 +507,7 @@
                                     <ItemsControl x:Name="ConnList" Focusable="False">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
-                                                <Border Padding="10,6" Margin="0,0,0,4" CornerRadius="8" Background="{StaticResource PanelInner}">
+                                                <Border Padding="10,6" Margin="0,0,0,4" CornerRadius="8" Background="{DynamicResource PanelInner}">
                                                     <StackPanel>
                                                         <TextBlock Text="{Binding Host}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip="{Binding Host}" />
                                                         <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}" />
@@ -534,7 +548,7 @@
                                     <Setter Property="Margin" Value="5,0" />
                                     <Setter Property="Padding" Value="14,10" />
                                     <Setter Property="CornerRadius" Value="10" />
-                                    <Setter Property="Background" Value="{StaticResource PanelInner}" />
+                                    <Setter Property="Background" Value="{DynamicResource PanelInner}" />
                                 </Style>
                             </UniformGrid.Resources>
                             <Border>
@@ -551,21 +565,21 @@
                             </Border>
                             <Border>
                                 <StackPanel>
-                                    <TextBlock Style="{StaticResource Caption}"><Run Text="↓" Foreground="{StaticResource DownBrush}" /> DOWNLOAD</TextBlock>
-                                    <TextBlock x:Name="SpeedDown" Text="–" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource DownBrush}" />
+                                    <TextBlock Style="{StaticResource Caption}"><Run Text="↓" Foreground="{DynamicResource DownBrush}" /> DOWNLOAD</TextBlock>
+                                    <TextBlock x:Name="SpeedDown" Text="–" FontSize="22" FontWeight="SemiBold" Foreground="{DynamicResource DownBrush}" />
                                 </StackPanel>
                             </Border>
                             <Border>
                                 <StackPanel>
-                                    <TextBlock Style="{StaticResource Caption}"><Run Text="↑" Foreground="{StaticResource UpBrush}" /> UPLOAD</TextBlock>
-                                    <TextBlock x:Name="SpeedUp" Text="–" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource UpBrush}" />
+                                    <TextBlock Style="{StaticResource Caption}"><Run Text="↑" Foreground="{DynamicResource UpBrush}" /> UPLOAD</TextBlock>
+                                    <TextBlock x:Name="SpeedUp" Text="–" FontSize="22" FontWeight="SemiBold" Foreground="{DynamicResource UpBrush}" />
                                 </StackPanel>
                             </Border>
                         </UniformGrid>
 
                         <Button x:Name="SpeedButton" Content="Test starten" Click="Speedtest_Click" HorizontalAlignment="Center"
                                 MinWidth="180" Height="40" FontSize="15" Style="{DynamicResource AccentButtonStyle}" />
-                        <TextBlock x:Name="SpeedError" Foreground="{StaticResource Danger}" FontSize="12" HorizontalAlignment="Center"
+                        <TextBlock x:Name="SpeedError" Foreground="{DynamicResource Danger}" FontSize="12" HorizontalAlignment="Center"
                                    TextWrapping="Wrap" Margin="0,10,0,0" />
                     </StackPanel>
                 </Border>
@@ -577,12 +591,12 @@
                         <ItemsControl x:Name="SpeedHistory" Template="{StaticResource ScrollingItems}" Focusable="False">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Padding="12,8" Margin="0,0,0,6" CornerRadius="8" Background="{StaticResource PanelInner}">
+                                    <Border Padding="12,8" Margin="0,0,0,6" CornerRadius="8" Background="{DynamicResource PanelInner}">
                                         <StackPanel>
                                             <TextBlock Text="{Binding Time, StringFormat={}{0:dd.MM.yyyy  HH:mm}}" Style="{StaticResource Caption}" />
                                             <TextBlock Margin="0,2,0,0">
-                                                <Run Text="↓" Foreground="{StaticResource DownBrush}" /> <Run Text="{Binding DownMbps, Mode=OneWay, StringFormat={}{0:0.0} Mbit/s}" FontWeight="SemiBold" />
-                                                <Run Text="   ↑" Foreground="{StaticResource UpBrush}" /> <Run Text="{Binding UpMbps, Mode=OneWay, StringFormat={}{0:0.0} Mbit/s}" FontWeight="SemiBold" />
+                                                <Run Text="↓" Foreground="{DynamicResource DownBrush}" /> <Run Text="{Binding DownMbps, Mode=OneWay, StringFormat={}{0:0.0} Mbit/s}" FontWeight="SemiBold" />
+                                                <Run Text="   ↑" Foreground="{DynamicResource UpBrush}" /> <Run Text="{Binding UpMbps, Mode=OneWay, StringFormat={}{0:0.0} Mbit/s}" FontWeight="SemiBold" />
                                             </TextBlock>
                                             <TextBlock Style="{StaticResource Caption}">
                                                 <Run Text="Ping" /> <Run Text="{Binding PingMs, Mode=OneWay, StringFormat={}{0:0} ms}" />
@@ -651,18 +665,18 @@
                                     </Grid.ColumnDefinitions>
                                     <Image Source="{Binding Icon}" Width="22" Height="22" HorizontalAlignment="Left" VerticalAlignment="Center" />
                                     <TextBlock Grid.Column="1" Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Grid.Column="2" Text="{Binding DownText}" Foreground="{StaticResource DownBrush}" VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="3" Text="{Binding UpText}" Foreground="{StaticResource UpBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="2" Text="{Binding DownText}" Foreground="{DynamicResource DownBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="3" Text="{Binding UpText}" Foreground="{DynamicResource UpBrush}" VerticalAlignment="Center" />
                                     <TextBlock Grid.Column="4" Text="{Binding TotalText}" FontWeight="SemiBold" VerticalAlignment="Center" />
                                     <!-- Anteil am größten Verbraucher: Download und Upload hintereinander -->
                                     <Grid Grid.Column="5" Height="8" VerticalAlignment="Center">
-                                        <Border CornerRadius="4" Background="#14FFFFFF" />
-                                        <Border CornerRadius="4" Background="{StaticResource UpBrush}" RenderTransformOrigin="0,0.5">
+                                        <Border CornerRadius="4" Background="{DynamicResource Hover}" />
+                                        <Border CornerRadius="4" Background="{DynamicResource UpBrush}" RenderTransformOrigin="0,0.5">
                                             <Border.RenderTransform>
                                                 <ScaleTransform ScaleX="{Binding TotalShare}" />
                                             </Border.RenderTransform>
                                         </Border>
-                                        <Border CornerRadius="4" Background="{StaticResource DownBrush}" RenderTransformOrigin="0,0.5">
+                                        <Border CornerRadius="4" Background="{DynamicResource DownBrush}" RenderTransformOrigin="0,0.5">
                                             <Border.RenderTransform>
                                                 <ScaleTransform ScaleX="{Binding DownShare}" />
                                             </Border.RenderTransform>
@@ -679,8 +693,8 @@
         </Grid>
 
         <!-- ===== Einstellungen (Overlay) ===== -->
-        <Grid x:Name="SettingsOverlay" Background="#B3000000" Visibility="Collapsed" MouseDown="SettingsOverlay_MouseDown">
-            <Border Width="560" MaxHeight="760" VerticalAlignment="Center" CornerRadius="14" Background="#1B1B23" BorderBrush="#24FFFFFF" BorderThickness="1"
+        <Grid x:Name="SettingsOverlay" Background="{DynamicResource Scrim}" Visibility="Collapsed" MouseDown="SettingsOverlay_MouseDown">
+            <Border Width="560" MaxHeight="760" VerticalAlignment="Center" CornerRadius="14" Background="{DynamicResource Dialog}" BorderBrush="{DynamicResource DialogBorder}" BorderThickness="1"
                     MouseDown="SettingsCard_MouseDown">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="26,22">
                     <StackPanel>
@@ -691,6 +705,63 @@
                             </Button>
                             <TextBlock Text="Einstellungen" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" />
                         </DockPanel>
+
+                        <TextBlock Text="DESIGN" Style="{StaticResource Section}" />
+                        <ListBox x:Name="ThemeList" SelectionChanged="Theme_Changed" BorderThickness="0" Background="Transparent"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="Design auswählen">
+                            <ListBox.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <UniformGrid Columns="3" />
+                                </ItemsPanelTemplate>
+                            </ListBox.ItemsPanel>
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
+                                    <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ListBoxItem">
+                                                <Border x:Name="Bg" Margin="3" Padding="6" CornerRadius="10" BorderThickness="2" BorderBrush="Transparent" Background="Transparent">
+                                                    <ContentPresenter />
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="Bg" Property="Background" Value="{DynamicResource Hover}" />
+                                                    </Trigger>
+                                                    <Trigger Property="IsSelected" Value="True">
+                                                        <Setter TargetName="Bg" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                                                    </Trigger>
+                                                    <Trigger Property="IsKeyboardFocused" Value="True">
+                                                        <Setter TargetName="Bg" Property="BorderBrush" Value="{DynamicResource Ink}" />
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel>
+                                        <!-- Mini-Vorschau: Hintergrund, Karte, Akzent-Punkt, Download-/Upload-Balken -->
+                                        <Border Height="58" CornerRadius="6" Background="{Binding PreviewBg}">
+                                            <Border Margin="8" CornerRadius="4" Background="{Binding PreviewPanel}">
+                                                <Grid Margin="6">
+                                                    <Rectangle Width="28" Height="4" RadiusX="2" RadiusY="2" Fill="{Binding PreviewInk}" HorizontalAlignment="Left" VerticalAlignment="Top" />
+                                                    <Ellipse Width="9" Height="9" Fill="{Binding PreviewAccent}" HorizontalAlignment="Right" VerticalAlignment="Top" />
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Bottom">
+                                                        <Rectangle Width="34" Height="5" RadiusX="2" RadiusY="2" Fill="{Binding PreviewDown}" Margin="0,0,4,0" />
+                                                        <Rectangle Width="20" Height="5" RadiusX="2" RadiusY="2" Fill="{Binding PreviewUp}" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Border>
+                                        </Border>
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="12" Margin="2,6,0,0" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{Binding Inspiration}" Style="{StaticResource Caption}" FontSize="11" Margin="2,0,0,0" TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
 
                         <TextBlock Text="ANZEIGE" Style="{StaticResource Section}" />
                         <DockPanel Margin="0,0,0,10">
@@ -710,17 +781,17 @@
                         </DockPanel>
 
                         <TextBlock Text="START" Style="{StaticResource Section}" />
-                        <CheckBox x:Name="AutostartBox" Content="Mit Windows starten" Click="Autostart_Click" Foreground="White" />
-                        <CheckBox x:Name="StartInTrayBox" Content="Beim Start nur im Infobereich (Tray) anzeigen" Click="StartInTray_Click" Foreground="White" Margin="0,6,0,0" />
+                        <CheckBox x:Name="AutostartBox" Content="Mit Windows starten" Click="Autostart_Click" Foreground="{DynamicResource Ink}" />
+                        <CheckBox x:Name="StartInTrayBox" Content="Beim Start nur im Infobereich (Tray) anzeigen" Click="StartInTray_Click" Foreground="{DynamicResource Ink}" Margin="0,6,0,0" />
 
                         <TextBlock Text="BENACHRICHTIGUNGEN" Style="{StaticResource Section}" />
-                        <CheckBox x:Name="NotifyNewAppsBox" Content="Melden, wenn ein Programm zum ersten Mal ins Internet geht" Click="NotifyNewApps_Click" Foreground="White" />
+                        <CheckBox x:Name="NotifyNewAppsBox" Content="Melden, wenn ein Programm zum ersten Mal ins Internet geht" Click="NotifyNewApps_Click" Foreground="{DynamicResource Ink}" />
 
                         <TextBlock Text="SPIELMODUS" Style="{StaticResource Section}" />
-                        <CheckBox x:Name="GameModeBox" Content="Spielmodus automatisch einschalten" Click="GameMode_Click" Foreground="White" />
+                        <CheckBox x:Name="GameModeBox" Content="Spielmodus automatisch einschalten" Click="GameMode_Click" Foreground="{DynamicResource Ink}" />
                         <TextBlock Text="Sobald ein Programm mit Vorrang läuft, teilen sich alle anderen Programme dieses Limit. So bleibt der Ping niedrig, auch wenn im Hintergrund Downloads laufen."
                                    Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,4" />
-                        <TextBlock x:Name="PriorityText" Style="{StaticResource Caption}" TextWrapping="Wrap" Foreground="{StaticResource UpBrush}" Margin="0,0,0,10" />
+                        <TextBlock x:Name="PriorityText" Style="{StaticResource Caption}" TextWrapping="Wrap" Foreground="{DynamicResource UpBrush}" Margin="0,0,0,10" />
                         <ContentControl x:Name="GameEditor" ContentTemplate="{StaticResource LimitEditor}" Focusable="False" />
 
                         <TextBlock Text="PROFILE" Style="{StaticResource Section}" />
@@ -729,7 +800,7 @@
                         <ItemsControl x:Name="ProfileList" Focusable="False">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Padding="12,6" Margin="0,0,0,4" CornerRadius="8" Background="{StaticResource PanelInner}">
+                                    <Border Padding="12,6" Margin="0,0,0,4" CornerRadius="8" Background="{DynamicResource PanelInner}">
                                         <DockPanel>
                                             <Button DockPanel.Dock="Right" Click="DeleteProfile_Click" Width="30" Height="30" Padding="0"
                                                     ToolTip="Profil löschen" AutomationProperties.Name="Profil löschen">
@@ -754,7 +825,7 @@
                         <ItemsControl x:Name="ScheduleList" Focusable="False">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Padding="12,10" Margin="0,0,0,6" CornerRadius="8" Background="{StaticResource PanelInner}">
+                                    <Border Padding="12,10" Margin="0,0,0,6" CornerRadius="8" Background="{DynamicResource PanelInner}">
                                         <StackPanel>
                                             <DockPanel>
                                                 <Button DockPanel.Dock="Right" Click="DeleteSchedule_Click" Width="30" Height="30" Padding="0"
@@ -790,7 +861,7 @@
                                                 <TextBox Text="{Binding To}" Width="64" Height="30" Margin="4,0,0,0" VerticalContentAlignment="Center"
                                                          AutomationProperties.Name="Bis (Uhrzeit)" ToolTip="Bis, z. B. 17:00" />
                                             </StackPanel>
-                                            <TextBlock Text="Uhrzeit im Format 09:00 eingeben und mindestens einen Tag wählen." Foreground="{StaticResource Danger}"
+                                            <TextBlock Text="Uhrzeit im Format 09:00 eingeben und mindestens einen Tag wählen." Foreground="{DynamicResource Danger}"
                                                        FontSize="12" Margin="0,6,0,0">
                                                 <TextBlock.Style>
                                                     <Style TargetType="TextBlock">
@@ -817,13 +888,13 @@
                         <ItemsControl x:Name="VpnList" Focusable="False">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Padding="12,8" Margin="0,0,0,4" CornerRadius="8" Background="{StaticResource PanelInner}">
+                                    <Border Padding="12,8" Margin="0,0,0,4" CornerRadius="8" Background="{DynamicResource PanelInner}">
                                         <DockPanel>
                                             <Button DockPanel.Dock="Right" Click="DeleteVpn_Click" Width="30" Height="30" Padding="0" Margin="8,0,0,0" VerticalAlignment="Center"
                                                     ToolTip="VPN entfernen" AutomationProperties.Name="VPN entfernen">
                                                 <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE74D;" FontSize="12" />
                                             </Button>
-                                            <CheckBox DockPanel.Dock="Right" Content="Kill-Switch" IsChecked="{Binding KillSwitch}" Foreground="White" MinWidth="0"
+                                            <CheckBox DockPanel.Dock="Right" Content="Kill-Switch" IsChecked="{Binding KillSwitch}" Foreground="{DynamicResource Ink}" MinWidth="0"
                                                       VerticalAlignment="Center" ToolTip="Verliert der Tunnel die Verbindung oder wird FlowCap beendet, werden die zugewiesenen Programme beendet" />
                                             <StackPanel VerticalAlignment="Center">
                                                 <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
@@ -843,7 +914,7 @@
                         <ItemsControl x:Name="ProxyList" Focusable="False">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Padding="12,6" Margin="0,0,0,4" CornerRadius="8" Background="{StaticResource PanelInner}">
+                                    <Border Padding="12,6" Margin="0,0,0,4" CornerRadius="8" Background="{DynamicResource PanelInner}">
                                         <DockPanel>
                                             <Button DockPanel.Dock="Right" Click="DeleteProxy_Click" Width="30" Height="30" Padding="0" Margin="6,0,0,0"
                                                     ToolTip="Proxy löschen" AutomationProperties.Name="Proxy löschen">
@@ -862,7 +933,7 @@
                         <TextBlock x:Name="ProxyEmpty" Text="Noch kein Proxy eingerichtet." Style="{StaticResource Caption}" Margin="0,0,0,6" />
 
                         <!-- Neuer Proxy: jedes Feld mit eigener Beschriftung -->
-                        <Border Padding="16,14" CornerRadius="10" Background="{StaticResource PanelInner}" Margin="0,4,0,0">
+                        <Border Padding="16,14" CornerRadius="10" Background="{DynamicResource PanelInner}" Margin="0,4,0,0">
                             <StackPanel>
                                 <StackPanel.Resources>
                                     <Style x:Key="FieldLabel" TargetType="TextBlock" BasedOn="{StaticResource Caption}">
@@ -934,7 +1005,7 @@
                                 <TextBlock x:Name="ProxyHint" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,8,0,0" />
                             </StackPanel>
                         </Border>
-                        <TextBlock x:Name="ProxyStatus" Foreground="{StaticResource Danger}" FontSize="12" TextWrapping="Wrap" Margin="0,4,0,0" />
+                        <TextBlock x:Name="ProxyStatus" Foreground="{DynamicResource Danger}" FontSize="12" TextWrapping="Wrap" Margin="0,4,0,0" />
 
                         <TextBlock Text="GESAMTLIMIT FÜR ALLE PROGRAMME" Style="{StaticResource Section}" />
                         <TextBlock Text="Gilt zusätzlich zu den Limits einzelner Programme. Die Programme teilen sich die Bandbreite reihum."

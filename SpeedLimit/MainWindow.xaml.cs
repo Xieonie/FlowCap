@@ -81,6 +81,8 @@ public partial class MainWindow : Window
         ConnList.ItemsSource = connRows;
         saveTimer.Tick += (_, _) => SaveNow();
 
+        ThemeList.ItemsSource = Theme.All;
+        ThemeList.SelectedItem = Theme.Get(settings.Theme); // löst ApplyTheme über SelectionChanged aus
         AppRow.UseBits = settings.UseBits;
         (settings.UseBits ? UnitBits : UnitBytes).IsChecked = true;
         (settings.GraphSeconds switch { 300 => Range300, 900 => Range900, _ => Range60 }).IsChecked = true;
@@ -940,6 +942,54 @@ public partial class MainWindow : Window
             SettingsOverlay.Visibility = Visibility.Collapsed;
             e.Handled = true;
         }
+    }
+
+    void Theme_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (ThemeList.SelectedItem is not Theme t || settings is null) return;
+        ApplyTheme(t);
+        if (settings.Theme == t.Id) return;
+        settings.Theme = t.Id;
+        ScheduleSave();
+    }
+
+    /// <summary>Farben des Themes in die Fenster-Ressourcen schreiben; alles mit DynamicResource färbt sich sofort um.</summary>
+    void ApplyTheme(Theme t)
+    {
+        Brush B(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
+        var r = Resources;
+        r["WindowBg"] = new LinearGradientBrush(t.BgTop, t.BgBottom, new Point(0, 0), new Point(1, 1));
+        r["Ink"] = B(t.Ink);
+        r["Muted"] = B(t.Muted);
+        r["Panel"] = B(t.Panel);
+        r["PanelInner"] = B(t.PanelInner);
+        r["Hairline"] = B(t.Hairline);
+        r["Accent"] = B(t.Accent);
+        r["OnAccent"] = B(t.OnAccent);
+        r["DownBrush"] = B(t.Down);
+        r["UpBrush"] = B(t.Up);
+        r["Danger"] = B(t.Danger);
+        r["Dialog"] = B(t.Dialog);
+        r["Hover"] = B(Theme.WithAlpha(t.Ink, 0x14));
+        r["SelectionBg"] = B(Theme.WithAlpha(t.Accent, 0x1F));
+        r["SelectionBorder"] = B(Theme.WithAlpha(t.Accent, 0x80));
+        r["AccentSoft"] = B(Theme.WithAlpha(t.Accent, 0x26));
+        r["UpSoft"] = B(Theme.WithAlpha(t.Up, 0x33));
+        r["DangerSoft"] = B(Theme.WithAlpha(t.Danger, 0x40));
+        r["Scrim"] = B(Color.FromArgb((byte)(t.IsLight ? 0x66 : 0xB3), 0, 0, 0));
+        r["DialogBorder"] = B(Theme.WithAlpha(t.Ink, 0x24));
+        r["CardRadius"] = new CornerRadius(t.Radius);
+        // Fluent-Steuerelemente (Auswahl, Regler, Häkchen, Akzent-Knöpfe) in der Theme-Farbe
+        r["AccentFillColorDefaultBrush"] = B(t.Accent);
+        r["AccentFillColorSecondaryBrush"] = B(Theme.WithAlpha(t.Accent, 0xE6));
+        r["AccentFillColorTertiaryBrush"] = B(Theme.WithAlpha(t.Accent, 0xCC));
+        r["TextOnAccentFillColorPrimaryBrush"] = B(t.OnAccent);
+        if (Application.Current is { } app) app.ThemeMode = t.IsLight ? ThemeMode.Light : ThemeMode.Dark; // Eingabefelder & Co. hell bzw. dunkel
+        RateGraph.SetTheme(t);
+        Gauge.SetTheme(t);
+        MainGraph.InvalidateVisual();
+        TotalGauge.InvalidateVisual();
+        SpeedGauge.InvalidateVisual();
     }
 
     void Unit_Changed(object sender, RoutedEventArgs e)

@@ -7,14 +7,24 @@ namespace SpeedLimit;
 /// <summary>Weiches Flächendiagramm: Download neon-cyan, Upload neon-grün; ohne Raster als Sparkline nutzbar.</summary>
 public sealed class RateGraph : FrameworkElement
 {
-    public static readonly Color DownColor = Color.FromRgb(0x00, 0xE5, 0xFF);
-    public static readonly Color UpColor = Color.FromRgb(0xA3, 0xFF, 0x12);
+    // Farben kommen vom aktiven Theme (SetTheme); alle Graphen zeichnen beim nächsten Update neu
+    public static Color DownColor { get; private set; }
+    public static Color UpColor { get; private set; }
+    static Brush DownFill = null!, UpFill = null!, LabelBrush = null!;
+    static Pen DownPen = null!, UpPen = null!, GridPen = null!;
 
-    static readonly Brush DownFill = Fill(DownColor), UpFill = Fill(UpColor);
-    static readonly Pen DownPen = Frozen(new Pen(Frozen(new SolidColorBrush(DownColor)), 2));
-    static readonly Pen UpPen = Frozen(new Pen(Frozen(new SolidColorBrush(UpColor)), 2));
-    static readonly Pen GridPen = Frozen(new Pen(Frozen(new SolidColorBrush(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF))), 1));
-    static readonly Brush LabelBrush = Frozen(new SolidColorBrush(Color.FromArgb(0x90, 0xFF, 0xFF, 0xFF)));
+    static RateGraph() => SetTheme(Theme.All[0]);
+
+    public static void SetTheme(Theme t)
+    {
+        (DownColor, UpColor) = (t.Down, t.Up);
+        DownFill = Fill(t.Down);
+        UpFill = Fill(t.Up);
+        DownPen = Frozen(new Pen(Frozen(new SolidColorBrush(t.Down)), 2));
+        UpPen = Frozen(new Pen(Frozen(new SolidColorBrush(t.Up)), 2));
+        GridPen = Frozen(new Pen(Frozen(new SolidColorBrush(Theme.WithAlpha(t.Ink, 0x22))), 1));
+        LabelBrush = Frozen(new SolidColorBrush(Theme.WithAlpha(t.Ink, 0x90)));
+    }
     const double AxisHeight = 22;
 
     public static readonly DependencyProperty DownProperty = DependencyProperty.Register(

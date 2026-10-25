@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>flowcap.ico</ApplicationIcon>
+    <Product>FlowCap</Product>
+    <AssemblyName>FlowCap</AssemblyName>
+    <Version>1.0.0</Version>
+    <!-- Fluent-Theme (ThemeMode) ist in WPF noch als experimentell markiert -->
+    <NoWarn>$(NoWarn);WPF0001</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- WinForms wird nur für das Tray-Icon gebraucht; ohne diese Zeilen kollidieren Application/MessageBox -->
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="flowcap.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- WinDivert 2.2.2, identisch mit dem offiziellen Release (github.com/basil00/WinDivert) -->
+    <None Include="native\WinDivert.dll" Link="WinDivert.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="native\WinDivert64.sys" Link="WinDivert64.sys" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BouncyCastle.Cryptography" Version="2.7.0" />
+  </ItemGroup>
+
+</Project>

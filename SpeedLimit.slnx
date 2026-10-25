@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="SpeedLimit.Tests/SpeedLimit.Tests.csproj" />
+  <Project Path="SpeedLimit/SpeedLimit.csproj" />
+</Solution>

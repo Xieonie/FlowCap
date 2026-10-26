@@ -102,6 +102,8 @@ public partial class MainWindow : Window
         (settings.GraphSeconds switch { 300 => Range300, 900 => Range900, _ => Range60 }).IsChecked = true;
         AutostartBox.IsChecked = Autostart.IsEnabled;
         StartInTrayBox.IsChecked = settings.StartInTray;
+        AutoUpdateBox.IsChecked = settings.AutoUpdate;
+        UpdateStatus.Text = $"Installiert: Version {Updater.Current}";
         totalRow = new AppRow("Gesamtlimit", null, settings.TotalLimit with { Blocked = false }, OnTotalLimitChanged);
         TotalEditor.Content = totalRow;
         gameRow = new AppRow("Andere Programme", null, settings.GameModeLimit with { Blocked = false }, OnGameLimitChanged);
@@ -207,6 +209,8 @@ public partial class MainWindow : Window
             ProxyStatus.Text = throttler.ProxyError is { } err ? "Letzter Fehler: " + err : "";
             UpdateVpnStatus();
             if (ticks % 5 == 0) _ = UpdatePingAsync();
+            // 30 s nach dem Start und danach stündlich nachsehen, ob die tägliche Prüfung fällig ist
+            if (ticks % 3600 == 30 && settings.AutoUpdate && DateTime.Now - settings.LastUpdateCheck > TimeSpan.FromDays(1)) _ = CheckUpdateAsync(manual: false);
             ticks++;
             if (UsageView.IsVisible && ticks % 5 == 0) RefreshUsage();
             if (ticks % 60 == 0) SaveUsage();
@@ -1261,6 +1265,75 @@ public partial class MainWindow : Window
     {
         settings.NotifyNewApps = NotifyNewAppsBox.IsChecked == true;
         ScheduleSave();
+    }
+
+    // ---------- Updates ----------
+
+    UpdateInfo? update;
+    bool updating;
+
+    void AutoUpdate_Click(object sender, RoutedEventArgs e)
+    {
+        settings.AutoUpdate = AutoUpdateBox.IsChecked == true;
+        ScheduleSave();
+    }
+
+    void CheckUpdate_Click(object sender, RoutedEventArgs e) => _ = CheckUpdateAsync(manual: true);
+
+    async Task CheckUpdateAsync(bool manual)
+    {
+        if (updating) return;
+        updating = true;
+        CheckUpdateButton.IsEnabled = false;
+        if (manual) UpdateStatus.Text = "Suche nach Updates …";
+        try
+        {
+            var found = await Updater.CheckAsync();
+            settings.LastUpdateCheck = DateTime.Now;
+            ScheduleSave();
+            if (found is null)
+            {
+                UpdateStatus.Text = $"Version {Updater.Current} ist aktuell.";
+                return;
+            }
+            var isNew = update?.Version != found.Version;
+            update = found;
+            UpdateStatus.Text = $"Version {found.Version} ist verfügbar (installiert: {Updater.Current}).";
+            UpdateNotes.Text = found.Notes.Replace("**", "").Trim();
+            UpdateNotes.Visibility = UpdateNotes.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+            InstallUpdateButton.Visibility = UpdatePill.Visibility = Visibility.Visible;
+            UpdatePill.Content = $"Update {found.Version}";
+            if (isNew && !manual) RaiseNotice("Update verfügbar", $"FlowCap {found.Version} ist da. In den Einstellungen mit einem Klick installieren.", null);
+        }
+        catch (Exception ex) when (ex is System.Net.Http.HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+        {
+            if (manual) UpdateStatus.Text = "Prüfung fehlgeschlagen: " + ex.Message;
+        }
+        finally
+        {
+            updating = false;
+            CheckUpdateButton.IsEnabled = true;
+        }
+    }
+
+    async void InstallUpdate_Click(object sender, RoutedEventArgs e)
+    {
+        if (update is null || updating) return;
+        updating = true;
+        InstallUpdateButton.IsEnabled = CheckUpdateButton.IsEnabled = false;
+        try
+        {
+            var path = await Updater.DownloadAsync(update, new Progress<double>(p => UpdateStatus.Text = $"Lade Version {update.Version} … {p:P0}"));
+            UpdateStatus.Text = "Installiere … FlowCap startet gleich neu.";
+            Updater.RunInstaller(path);
+            Application.Current.Shutdown(); // Installer würde FlowCap sonst hart beenden; so wird vorher gespeichert
+        }
+        catch (Exception ex) when (ex is System.Net.Http.HttpRequestException or System.IO.IOException or TaskCanceledException or System.ComponentModel.Win32Exception)
+        {
+            UpdateStatus.Text = "Update fehlgeschlagen: " + ex.Message;
+            InstallUpdateButton.IsEnabled = CheckUpdateButton.IsEnabled = true;
+            updating = false;
+        }
     }
 
     void StartInTray_Click(object sender, RoutedEventArgs e)

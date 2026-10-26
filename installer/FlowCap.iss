@@ -1,5 +1,5 @@
 #define AppName "FlowCap"
-#define AppVersion "1.1.0"
+#define AppVersion "1.2.0"
 #define AppExe "FlowCap.exe"
 
 [Setup]
@@ -36,6 +36,8 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopico
 
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: postinstall nowait shellexec skipifsilent
+; Update aus FlowCap heraus (/SILENT /RESTARTAPP=1): danach wieder starten
+Filename: "{app}\{#AppExe}"; Flags: nowait shellexec; Check: RestartAfterUpdate
 
 [UninstallRun]
 Filename: "taskkill.exe"; Parameters: "/IM {#AppExe} /F"; Flags: runhidden; RunOnceId: "StopApp"
@@ -43,6 +45,11 @@ Filename: "schtasks.exe"; Parameters: "/Delete /TN FlowCap /F"; Flags: runhidden
 Filename: "netsh.exe"; Parameters: "advfirewall firewall delete rule name=""FlowCap Proxy-Relay"""; Flags: runhidden; RunOnceId: "RemoveFirewallRule"
 
 [Code]
+function RestartAfterUpdate: Boolean;
+begin
+  Result := WizardSilent and (ExpandConstant('{param:RESTARTAPP|0}') = '1');
+end;
+
 // Laufende Instanz (läuft meist unsichtbar im Tray) beenden, sonst sind die Dateien beim Update gesperrt.
 // SpeedLimit.exe ist der Name bis Version 1.0 – sonst blockieren sich alte und neue Version gegenseitig den Treiber.
 function PrepareToInstall(var NeedsRestart: Boolean): String;

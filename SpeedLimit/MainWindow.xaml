@@ -222,6 +222,8 @@
                                   ToolTip="Alle Limits und Sperren vorübergehend aussetzen" AutomationProperties.Name="Limits pausieren">
                         <TextBlock><Run FontFamily="{StaticResource Icons}" Text="&#xE769;" /> <Run x:Name="PauseText" Text="Pausieren" /></TextBlock>
                     </ToggleButton>
+                    <Button x:Name="UpdatePill" Click="OpenSettings_Click" Visibility="Collapsed" Margin="8,0" Height="30" Padding="12,0"
+                            Style="{DynamicResource AccentButtonStyle}" ToolTip="Neue Version verfügbar – in den Einstellungen installieren" />
                     <Button Style="{StaticResource IconButton}" Click="OpenSettings_Click" ToolTip="Einstellungen" AutomationProperties.Name="Einstellungen">
                         <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE713;" FontSize="16" />
                     </Button>
@@ -913,6 +915,16 @@
                         <TextBlock Text="START" Style="{StaticResource Section}" />
                         <CheckBox x:Name="AutostartBox" Content="Mit Windows starten" Click="Autostart_Click" Foreground="{DynamicResource Ink}" />
                         <CheckBox x:Name="StartInTrayBox" Content="Beim Start nur im Infobereich (Tray) anzeigen" Click="StartInTray_Click" Foreground="{DynamicResource Ink}" Margin="0,6,0,0" />
+
+                        <TextBlock Text="UPDATES" Style="{StaticResource Section}" />
+                        <CheckBox x:Name="AutoUpdateBox" Content="Automatisch nach Updates suchen (beim Start und täglich)" Click="AutoUpdate_Click" Foreground="{DynamicResource Ink}" />
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <Button x:Name="CheckUpdateButton" Content="Jetzt prüfen" Click="CheckUpdate_Click" MinWidth="110" />
+                            <Button x:Name="InstallUpdateButton" Content="Jetzt aktualisieren" Click="InstallUpdate_Click" MinWidth="150" Margin="8,0,0,0"
+                                    Style="{DynamicResource AccentButtonStyle}" Visibility="Collapsed" />
+                        </StackPanel>
+                        <TextBlock x:Name="UpdateStatus" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,0" />
+                        <TextBlock x:Name="UpdateNotes" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" MaxHeight="160" Visibility="Collapsed" />
 
                         <TextBlock Text="BENACHRICHTIGUNGEN" Style="{StaticResource Section}" />
                         <CheckBox x:Name="NotifyNewAppsBox" Content="Melden, wenn ein Programm zum ersten Mal ins Internet geht" Click="NotifyNewApps_Click" Foreground="{DynamicResource Ink}" />

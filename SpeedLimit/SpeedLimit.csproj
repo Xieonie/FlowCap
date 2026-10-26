@@ -12,7 +12,7 @@
     <ApplicationIcon>flowcap.ico</ApplicationIcon>
     <Product>FlowCap</Product>
     <AssemblyName>FlowCap</AssemblyName>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <!-- Fluent-Theme (ThemeMode) ist in WPF noch als experimentell markiert -->
     <NoWarn>$(NoWarn);WPF0001</NoWarn>
   </PropertyGroup>

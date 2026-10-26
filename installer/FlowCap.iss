@@ -1,5 +1,5 @@
 #define AppName "FlowCap"
-#define AppVersion "1.0.0"
+#define AppVersion "1.1.0"
 #define AppExe "FlowCap.exe"
 
 [Setup]

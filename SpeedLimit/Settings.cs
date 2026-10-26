@@ -55,6 +55,7 @@ public sealed class Settings
 
     /// <summary>Letzte Speedtests, neuester zuerst.</summary>
     public System.Collections.ObjectModel.ObservableCollection<SpeedResult> SpeedTests { get; set; } = [];
+    public string PingTarget { get; set; } = "Cloudflare (1.1.1.1)";
 
     /// <summary>Live-Werte als Profil-Kopie.</summary>
     public Profile Snapshot() => new() { Limits = new(Limits), TotalLimit = TotalLimit };

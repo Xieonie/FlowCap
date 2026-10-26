@@ -233,6 +233,7 @@
                         <RadioButton x:Name="LiveTab" Content="Live" IsChecked="True" GroupName="Tab" Style="{StaticResource Pill}" Checked="Tab_Changed" />
                         <RadioButton x:Name="UsageTab" Content="Verbrauch" GroupName="Tab" Style="{StaticResource Pill}" Checked="Tab_Changed" MinWidth="90" />
                         <RadioButton x:Name="SpeedTab" Content="Speedtest" GroupName="Tab" Style="{StaticResource Pill}" Checked="Tab_Changed" MinWidth="90" />
+                        <RadioButton x:Name="PingTab" Content="Ping" GroupName="Tab" Style="{StaticResource Pill}" Checked="Tab_Changed" />
                     </StackPanel>
                 </StackPanel>
             </DockPanel>
@@ -689,6 +690,55 @@
                     </DockPanel>
                 </Border>
             </Grid>
+
+            <!-- ===== Pingtest ===== -->
+            <Border x:Name="PingView" Grid.Row="1" Style="{StaticResource Card}" Padding="22,18" Visibility="Collapsed">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <DockPanel>
+                        <Button x:Name="PingButton" DockPanel.Dock="Right" Content="Start" Click="PingTest_Click" MinWidth="120" Height="34"
+                                Margin="10,0,0,0" Style="{DynamicResource AccentButtonStyle}" />
+                        <ComboBox x:Name="PingTarget" DockPanel.Dock="Right" IsEditable="True" Width="260"
+                                  AutomationProperties.Name="Ziel für den Pingtest"
+                                  ToolTip="Vorgabe wählen oder eigene Adresse eintippen, z. B. einen Spieleserver">
+                            <ComboBoxItem Content="Cloudflare (1.1.1.1)" />
+                            <ComboBoxItem Content="Google (8.8.8.8)" />
+                            <ComboBoxItem Content="Quad9 (9.9.9.9)" />
+                            <ComboBoxItem Content="OpenDNS (208.67.222.222)" />
+                        </ComboBox>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="Pingtest" FontSize="20" FontWeight="SemiBold" />
+                            <TextBlock Text="Pingt das Ziel einmal pro Sekunde, bis du stoppst. Rote Linien im Graphen = verlorene Pakete."
+                                       Style="{StaticResource Caption}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </DockPanel>
+
+                    <UniformGrid Grid.Row="1" Columns="6" Margin="-5,16,-5,16">
+                        <UniformGrid.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="Margin" Value="5,0" />
+                                <Setter Property="Padding" Value="14,10" />
+                                <Setter Property="CornerRadius" Value="10" />
+                                <Setter Property="Background" Value="{DynamicResource PanelInner}" />
+                            </Style>
+                        </UniformGrid.Resources>
+                        <Border><StackPanel><TextBlock Text="AKTUELL" Style="{StaticResource Caption}" /><TextBlock x:Name="PingNow" Text="–" FontSize="22" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" /></StackPanel></Border>
+                        <Border><StackPanel><TextBlock Text="MIN" Style="{StaticResource Caption}" /><TextBlock x:Name="PingMin" Text="–" FontSize="22" FontWeight="SemiBold" /></StackPanel></Border>
+                        <Border><StackPanel><TextBlock Text="MITTEL" Style="{StaticResource Caption}" /><TextBlock x:Name="PingAvg" Text="–" FontSize="22" FontWeight="SemiBold" /></StackPanel></Border>
+                        <Border><StackPanel><TextBlock Text="MAX" Style="{StaticResource Caption}" /><TextBlock x:Name="PingMax" Text="–" FontSize="22" FontWeight="SemiBold" /></StackPanel></Border>
+                        <Border><StackPanel><TextBlock Text="JITTER" Style="{StaticResource Caption}" /><TextBlock x:Name="PingJitter" Text="–" FontSize="22" FontWeight="SemiBold" /></StackPanel></Border>
+                        <Border><StackPanel><TextBlock Text="PAKETVERLUST" Style="{StaticResource Caption}" /><TextBlock x:Name="PingLoss" Text="–" FontSize="22" FontWeight="SemiBold" /></StackPanel></Border>
+                    </UniformGrid>
+
+                    <local:RateGraph x:Name="PingGraph" Grid.Row="2" ShowGrid="True" Unit="ms" />
+                    <TextBlock x:Name="PingStatus" Grid.Row="3" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,10,0,0" />
+                </Grid>
+            </Border>
 
             <!-- ===== Verbrauch ===== -->
             <Border x:Name="UsageView" Grid.Row="1" Style="{StaticResource Card}" Padding="22,18" Visibility="Collapsed">

@@ -131,6 +131,7 @@ public partial class MainWindow : Window
         settings.Vpns.CollectionChanged += (_, _) => ShowVpnEmpty();
         ShowVpnEmpty();
 
+        PingTarget.Text = settings.PingTarget;
         SpeedHistory.ItemsSource = settings.SpeedTests;
         void ShowHistoryEmpty() => SpeedHistoryEmpty.Visibility = settings.SpeedTests.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         settings.SpeedTests.CollectionChanged += (_, _) => ShowHistoryEmpty();
@@ -833,11 +834,12 @@ public partial class MainWindow : Window
 
     void Tab_Changed(object sender, RoutedEventArgs e)
     {
-        if (LiveView is null || UsageView is null || SpeedView is null) return;
+        if (LiveView is null || UsageView is null || SpeedView is null || PingView is null) return;
         static Visibility Show(bool on) => on ? Visibility.Visible : Visibility.Collapsed;
         LiveView.Visibility = Show(LiveTab.IsChecked == true);
         UsageView.Visibility = Show(UsageTab.IsChecked == true);
         SpeedView.Visibility = Show(SpeedTab.IsChecked == true);
+        PingView.Visibility = Show(PingTab.IsChecked == true);
         if (UsageTab.IsChecked == true) RefreshUsage();
     }
 
@@ -853,6 +855,83 @@ public partial class MainWindow : Window
         var ms = await SpeedTest.PingOnceAsync();
         PingText.Text = ms is { } v ? $"{v:0} ms" : "keine Antwort";
         pinging = false;
+    }
+
+    CancellationTokenSource? pingCts;
+
+    async void PingTest_Click(object sender, RoutedEventArgs e)
+    {
+        if (pingCts is not null)
+        {
+            pingCts.Cancel(); // zweiter Klick = stoppen
+            return;
+        }
+        var host = SpeedTest.HostOf(PingTarget.Text);
+        if (host.Length == 0)
+        {
+            PingStatus.Text = "Bitte ein Ziel wählen oder eintippen.";
+            return;
+        }
+        settings.PingTarget = PingTarget.Text.Trim();
+        ScheduleSave();
+
+        pingCts = new CancellationTokenSource();
+        var ct = pingCts.Token;
+        PingButton.Content = "Stopp";
+        PingTarget.IsEnabled = false;
+        PingStatus.Text = $"Pinge {host} …";
+        var samples = new List<double?>();
+        const int GraphPoints = 120;
+        try
+        {
+            while (true)
+            {
+                var started = DateTime.UtcNow;
+                double? ms;
+                try
+                {
+                    ms = await SpeedTest.PingHostAsync(host, ct);
+                }
+                catch (System.Net.NetworkInformation.PingException) when (samples.Count > 0)
+                {
+                    ms = null; // Netz kurz weg (z. B. DNS) – zählt als Verlust statt den Test zu beenden
+                }
+                samples.Add(ms);
+
+                var s = SpeedTest.PingStats.Of(samples);
+                static string Ms(double? v) => v is { } x ? $"{x:0} ms" : "–";
+                PingNow.Text = ms is null ? "verloren" : Ms(ms);
+                (PingMin.Text, PingAvg.Text, PingMax.Text) = (Ms(s.Min), Ms(s.Avg), Ms(s.Max));
+                PingJitter.Text = Ms(s.Jitter);
+                PingLoss.Text = $"{s.LossPercent:0.#} %";
+                PingStatus.Text = $"{host} · {s.Sent} Pakete gesendet";
+
+                // Verlorene Pakete im Graphen mit dem letzten Wert überbrücken und rot markieren
+                var recent = samples.TakeLast(GraphPoints).ToList();
+                var line = new double[recent.Count];
+                for (var i = 0; i < line.Length; i++) line[i] = recent[i] ?? (i > 0 ? line[i - 1] : 0);
+                PingGraph.Down = line;
+                PingGraph.Lost = recent.Select(v => v is null).ToArray();
+
+                var wait = TimeSpan.FromSeconds(1) - (DateTime.UtcNow - started);
+                if (wait > TimeSpan.Zero) await Task.Delay(wait, ct);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            PingStatus.Text = $"Gestoppt · {samples.Count} Pakete an {host}";
+        }
+        catch (System.Net.NetworkInformation.PingException)
+        {
+            PingStatus.Text = $"„{host}“ wurde nicht gefunden. Adresse prüfen.";
+        }
+        finally
+        {
+            pingCts.Dispose();
+            pingCts = null;
+            PingButton.Content = "Start";
+            PingTarget.IsEnabled = true;
+        }
     }
 
     async void Speedtest_Click(object sender, RoutedEventArgs e)

@@ -11,7 +11,7 @@ public sealed class RateGraph : FrameworkElement
     public static Color DownColor { get; private set; }
     public static Color UpColor { get; private set; }
     static Brush DownFill = null!, UpFill = null!, LabelBrush = null!;
-    static Pen DownPen = null!, UpPen = null!, GridPen = null!;
+    static Pen DownPen = null!, UpPen = null!, GridPen = null!, LostPen = null!;
 
     static RateGraph() => SetTheme(Theme.All[0]);
 
@@ -24,6 +24,7 @@ public sealed class RateGraph : FrameworkElement
         UpPen = Frozen(new Pen(Frozen(new SolidColorBrush(t.Up)), 2));
         GridPen = Frozen(new Pen(Frozen(new SolidColorBrush(Theme.WithAlpha(t.Ink, 0x22))), 1));
         LabelBrush = Frozen(new SolidColorBrush(Theme.WithAlpha(t.Ink, 0x90)));
+        LostPen = Frozen(new Pen(Frozen(new SolidColorBrush(Theme.WithAlpha(t.Danger, 0xA0))), 2));
     }
     const double AxisHeight = 22;
 
@@ -33,6 +34,16 @@ public sealed class RateGraph : FrameworkElement
         nameof(Up), typeof(IReadOnlyList<double>), typeof(RateGraph), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
     public static readonly DependencyProperty ShowGridProperty = DependencyProperty.Register(
         nameof(ShowGrid), typeof(bool), typeof(RateGraph), new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public static readonly DependencyProperty UnitProperty = DependencyProperty.Register(
+        nameof(Unit), typeof(string), typeof(RateGraph), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
+    public static readonly DependencyProperty LostProperty = DependencyProperty.Register(
+        nameof(Lost), typeof(IReadOnlyList<bool>), typeof(RateGraph), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    /// <summary>Einheit der Skala (z. B. "ms"); leer = Datenrate in KB/s.</summary>
+    public string? Unit { get => (string?)GetValue(UnitProperty); set => SetValue(UnitProperty, value); }
+    /// <summary>Pro Messpunkt: true = verloren, wird als rote Markierung gezeichnet.</summary>
+    public IReadOnlyList<bool>? Lost { get => (IReadOnlyList<bool>?)GetValue(LostProperty); set => SetValue(LostProperty, value); }
 
     /// <summary>KB/s pro Sekunde, ältester Wert zuerst, letzter Wert = jetzt.</summary>
     public IReadOnlyList<double>? Down { get => (IReadOnlyList<double>?)GetValue(DownProperty); set => SetValue(DownProperty, value); }
@@ -58,7 +69,7 @@ public sealed class RateGraph : FrameworkElement
                 var y = Math.Round(h * i / 4) + 0.5;
                 dc.DrawLine(GridPen, new Point(0, y), new Point(w, y));
             }
-            dc.DrawText(Text(AppRow.FormatRate(max), dpi), new Point(0, 4));
+            dc.DrawText(Text(Unit is null ? AppRow.FormatRate(max) : $"{max:0} {Unit}", dpi), new Point(0, 4));
             // Zeitachse: Uhrzeiten wie bei GlassWire, ältester Punkt links
             var n = Math.Max(down.Count, 2);
             for (var k = 0; k <= 4; k++)
@@ -68,6 +79,13 @@ public sealed class RateGraph : FrameworkElement
                 dc.DrawText(label, new Point(x, h + 6));
             }
         }
+        if (Lost is { Count: > 1 } lost)
+            for (var i = 0; i < lost.Count; i++)
+                if (lost[i])
+                {
+                    var x = i * w / (lost.Count - 1);
+                    dc.DrawLine(LostPen, new Point(x, 0), new Point(x, h));
+                }
         DrawSeries(dc, up, max, w, h, UpFill, UpPen);
         DrawSeries(dc, down, max, w, h, DownFill, DownPen);
     }

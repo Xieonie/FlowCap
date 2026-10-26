@@ -26,16 +26,43 @@ public static class SpeedTest
     /// <summary>Einzelner Ping in ms, null wenn keine Antwort.</summary>
     public static async Task<double?> PingOnceAsync(CancellationToken ct = default)
     {
-        using var ping = new Ping();
         try
         {
-            var reply = await ping.SendPingAsync(IPAddress.Parse(PingHost), TimeSpan.FromSeconds(2), cancellationToken: ct);
-            return reply.Status == IPStatus.Success ? reply.RoundtripTime : null;
+            return await PingHostAsync(PingHost, ct);
         }
         catch (PingException)
         {
             return null;
         }
+    }
+
+    /// <summary>Ping an Adresse oder Hostnamen; null = keine Antwort. PingException, wenn der Name nicht aufgelöst werden kann.</summary>
+    public static async Task<double?> PingHostAsync(string host, CancellationToken ct)
+    {
+        using var ping = new Ping();
+        var reply = await ping.SendPingAsync(host, TimeSpan.FromSeconds(2), cancellationToken: ct);
+        return reply.Status == IPStatus.Success ? reply.RoundtripTime : null;
+    }
+
+    /// <summary>Kennzahlen eines Pingtests; null-Einträge sind verlorene Pakete.</summary>
+    public sealed record PingStats(int Sent, double LossPercent, double? Min, double? Avg, double? Max, double Jitter)
+    {
+        public static PingStats Of(IReadOnlyList<double?> samples)
+        {
+            var ok = samples.OfType<double>().ToList();
+            var loss = samples.Count == 0 ? 0 : 100.0 * (samples.Count - ok.Count) / samples.Count;
+            return ok.Count == 0
+                ? new(samples.Count, loss, null, null, null, 0)
+                : new(samples.Count, loss, ok.Min(), ok.Average(), ok.Max(), SpeedTest.Jitter(ok));
+        }
+    }
+
+    /// <summary>"Cloudflare (1.1.1.1)" → "1.1.1.1"; freie Eingaben bleiben, wie sie sind.</summary>
+    public static string HostOf(string target)
+    {
+        target = target.Trim();
+        var open = target.LastIndexOf('(');
+        return open >= 0 && target.EndsWith(')') ? target[(open + 1)..^1].Trim() : target;
     }
 
     /// <summary>Mehrere Pings: Mittelwert und Jitter in ms.</summary>

@@ -101,6 +101,51 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <!-- Rahmen um jedes Live-Modul. Im Anordnen-Modus: ganze Fläche ziehbar, Namensschild, Ausblenden oben rechts, Eckgriff unten rechts -->
+        <ControlTemplate x:Key="ModuleFrame" TargetType="ContentControl">
+            <Grid>
+                <ContentPresenter x:Name="Body" />
+                <Border x:Name="EditLayer" Visibility="Collapsed" Background="Transparent" Cursor="SizeAll" TextElement.Foreground="{DynamicResource Ink}"
+                        BorderBrush="{DynamicResource SelectionBorder}" BorderThickness="1.5" CornerRadius="{DynamicResource CardRadius}"
+                        Tag="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}" MouseLeftButtonDown="ModuleGrip_MouseDown"
+                        ToolTip="Ziehen zum Verschieben">
+                    <Grid>
+                        <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10" Padding="10,5" CornerRadius="12"
+                                Background="{DynamicResource Dialog}" BorderBrush="{DynamicResource SelectionBorder}" BorderThickness="1">
+                            <TextBlock FontSize="12" FontWeight="SemiBold">
+                                <Run FontFamily="{StaticResource Icons}" Text="&#xE76F;" Foreground="{DynamicResource Accent}" />
+                                <Run Text="{Binding (AutomationProperties.Name), RelativeSource={RelativeSource TemplatedParent}, Mode=OneWay}" />
+                            </TextBlock>
+                        </Border>
+                        <Button HorizontalAlignment="Right" VerticalAlignment="Top" Margin="8" Width="32" Height="32" Padding="0" Cursor="Hand"
+                                ToolTip="Ausblenden" AutomationProperties.Name="Modul ausblenden"
+                                Tag="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}" Click="HideModule_Click">
+                            <TextBlock FontFamily="{StaticResource Icons}" Text="&#xED1A;" FontSize="13" />
+                        </Button>
+                        <Border x:Name="ResizeGrip" Width="26" Height="26" Margin="2" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                Background="Transparent" Cursor="SizeNWSE" ToolTip="Ziehen zum Ändern der Größe"
+                                Tag="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}" MouseLeftButtonDown="ModuleResize_MouseDown">
+                            <Path x:Name="GripLines" Data="M 20,8 L 8,20 M 20,13 L 13,20 M 20,18 L 18,20" Stroke="{DynamicResource Muted}"
+                                  StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                        </Border>
+                    </Grid>
+                </Border>
+            </Grid>
+            <ControlTemplate.Triggers>
+                <Trigger Property="local:DashboardPanel.Editing" Value="True">
+                    <Setter TargetName="EditLayer" Property="Visibility" Value="Visible" />
+                    <!-- Inhalt abdunkeln: Werkzeuge bleiben lesbar, und der Bearbeiten-Modus ist sofort erkennbar -->
+                    <Setter TargetName="Body" Property="Opacity" Value="0.35" />
+                </Trigger>
+                <Trigger SourceName="EditLayer" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="EditLayer" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                    <Setter TargetName="EditLayer" Property="Background" Value="{DynamicResource Hover}" />
+                </Trigger>
+                <Trigger SourceName="ResizeGrip" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="GripLines" Property="Stroke" Value="{DynamicResource Accent}" />
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
         <ControlTemplate x:Key="ScrollingItems" TargetType="ItemsControl">
             <ScrollViewer Focusable="False" Padding="0,0,6,0">
                 <ItemsPresenter />
@@ -169,6 +214,10 @@
                     <TextBlock Text="Profil" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="0,0,8,0" />
                     <ComboBox x:Name="ProfileBox" MinWidth="150" Height="34" VerticalAlignment="Center" SelectionChanged="ProfileBox_SelectionChanged"
                               AutomationProperties.Name="Profil" ToolTip="Profil wechseln – neue Profile in den Einstellungen anlegen" />
+                    <ToggleButton x:Name="LayoutToggle" Style="{StaticResource IconToggle}" Click="LayoutToggle_Click"
+                                  ToolTip="Module verschieben, anordnen und ausblenden" AutomationProperties.Name="Anordnen">
+                        <TextBlock><Run FontFamily="{StaticResource Icons}" Text="&#xE8A9;" /> Anordnen</TextBlock>
+                    </ToggleButton>
                     <ToggleButton x:Name="PauseToggle" Style="{StaticResource IconToggle}" Click="Pause_Click"
                                   ToolTip="Alle Limits und Sperren vorübergehend aussetzen" AutomationProperties.Name="Limits pausieren">
                         <TextBlock><Run FontFamily="{StaticResource Icons}" Text="&#xE769;" /> <Run x:Name="PauseText" Text="Pausieren" /></TextBlock>
@@ -191,16 +240,47 @@
             <!-- ===== Live ===== -->
             <Grid x:Name="LiveView" Grid.Row="1">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="360" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <Border Style="{StaticResource Card}" Padding="22,16,22,12" Margin="0,0,0,14">
+                <!-- Leiste im Anordnen-Modus -->
+                <Border x:Name="LayoutBar" Style="{StaticResource Card}" Padding="16,10" Margin="0,0,0,14" Visibility="Collapsed">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                            <Button Content="Standard wiederherstellen" Click="ResetLayout_Click" Height="32" Padding="12,0" Margin="0,0,8,0" />
+                            <Button Content="Fertig" Click="FinishLayout_Click" Height="32" Padding="18,0" Style="{DynamicResource AccentButtonStyle}" />
+                        </StackPanel>
+                        <WrapPanel VerticalAlignment="Center">
+                            <TextBlock Text="Module am Griff verschieben, an der Ecke unten rechts die Größe ändern." VerticalAlignment="Center" Margin="0,0,16,0" />
+                            <ItemsControl x:Name="HiddenModules" Focusable="False">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Content="{Binding Title}" ContentStringFormat="＋ {0} einblenden" Tag="{Binding Id}" Click="ShowModule_Click"
+                                                Height="30" Padding="10,0" Margin="0,0,6,0" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </WrapPanel>
+                    </DockPanel>
+                </Border>
+
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                <local:DashboardPanel x:Name="Board" Background="Transparent">
+                <!-- Zielmarke beim Ziehen: hier landet das Modul -->
+                <Rectangle x:Name="DragGhost" Visibility="Collapsed" RadiusX="12" RadiusY="12" StrokeThickness="2" StrokeDashArray="5 4"
+                           Stroke="{DynamicResource Accent}" Fill="{DynamicResource AccentSoft}" IsHitTestVisible="False" />
+                <ContentControl x:Name="ModGraph" Tag="graph" Template="{StaticResource ModuleFrame}" AutomationProperties.Name="Live-Graph">
+                <Border Style="{StaticResource Card}" Padding="22,16,22,12">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
-                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
                         <DockPanel Margin="0,0,0,8">
                             <Border DockPanel.Dock="Right" CornerRadius="13" Padding="12,4" Background="{DynamicResource PanelInner}">
@@ -225,41 +305,37 @@
 
                         <local:RateGraph x:Name="MainGraph" Grid.Row="1" ShowGrid="True" />
 
-                        <Grid Grid.Row="2" Margin="0,8,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,20,0">
-                                <TextBlock HorizontalAlignment="Right">
-                                    <Run x:Name="CurrentDown" FontSize="22" FontWeight="SemiBold" />
-                                    <Run FontFamily="{StaticResource Icons}" Text="&#xE74B;" FontSize="16" Foreground="{DynamicResource DownBrush}" />
-                                </TextBlock>
-                                <TextBlock Text="Download" Style="{StaticResource Caption}" HorizontalAlignment="Right" Margin="0,0,22,0" />
-                            </StackPanel>
-                            <local:Gauge x:Name="TotalGauge" Grid.Column="2" Width="150" Height="92" />
-                            <StackPanel Grid.Column="3" VerticalAlignment="Center" Margin="20,0,0,0">
-                                <TextBlock>
-                                    <Run FontFamily="{StaticResource Icons}" Text="&#xE74A;" FontSize="16" Foreground="{DynamicResource UpBrush}" />
-                                    <Run x:Name="CurrentUp" FontSize="22" FontWeight="SemiBold" />
-                                </TextBlock>
-                                <TextBlock Text="Upload" Style="{StaticResource Caption}" Margin="22,0,0,0" />
-                            </StackPanel>
-                        </Grid>
                     </Grid>
                 </Border>
+                </ContentControl>
 
-                <Grid Grid.Row="1">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="14" />
-                        <ColumnDefinition Width="370" />
-                    </Grid.ColumnDefinitions>
-
+                <!-- Tacho: Download, Gesamt, Upload -->
+                <ContentControl x:Name="ModStats" Tag="stats" Template="{StaticResource ModuleFrame}" AutomationProperties.Name="Tacho">
+                    <Border Style="{StaticResource Card}" Padding="22,10">
+                        <!-- verkleinert sich in schmalen Bereichen, statt abgeschnitten zu werden -->
+                        <Viewbox Stretch="Uniform" StretchDirection="DownOnly">
+                            <StackPanel Orientation="Horizontal">
+                                <StackPanel VerticalAlignment="Center" Margin="0,0,20,0" MinWidth="120">
+                                    <TextBlock HorizontalAlignment="Right">
+                                        <Run x:Name="CurrentDown" FontSize="22" FontWeight="SemiBold" />
+                                        <Run FontFamily="{StaticResource Icons}" Text="&#xE74B;" FontSize="16" Foreground="{DynamicResource DownBrush}" />
+                                    </TextBlock>
+                                    <TextBlock Text="Download" Style="{StaticResource Caption}" HorizontalAlignment="Right" Margin="0,0,22,0" />
+                                </StackPanel>
+                                <local:Gauge x:Name="TotalGauge" Width="150" Height="92" />
+                                <StackPanel VerticalAlignment="Center" Margin="20,0,0,0" MinWidth="120">
+                                    <TextBlock>
+                                        <Run FontFamily="{StaticResource Icons}" Text="&#xE74A;" FontSize="16" Foreground="{DynamicResource UpBrush}" />
+                                        <Run x:Name="CurrentUp" FontSize="22" FontWeight="SemiBold" />
+                                    </TextBlock>
+                                    <TextBlock Text="Upload" Style="{StaticResource Caption}" Margin="22,0,0,0" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Viewbox>
+                    </Border>
+                </ContentControl>
                     <!-- Programmliste -->
+                    <ContentControl x:Name="ModApps" Tag="apps" Template="{StaticResource ModuleFrame}" AutomationProperties.Name="Programmliste">
                     <Border Style="{StaticResource Card}" Padding="14">
                         <Grid>
                             <Grid.RowDefinitions>
@@ -356,8 +432,10 @@
                         </Grid>
                     </Border>
 
+                    </ContentControl>
                     <!-- Detailbereich für das ausgewählte Programm -->
-                    <Border Grid.Column="2" Style="{StaticResource Card}" DataContext="{Binding SelectedItem, ElementName=AppList}">
+                    <ContentControl x:Name="ModDetails" Tag="details" Template="{StaticResource ModuleFrame}" AutomationProperties.Name="Details">
+                    <Border Style="{StaticResource Card}" DataContext="{Binding SelectedItem, ElementName=AppList}">
                         <Grid>
                             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                                 <StackPanel.Style>
@@ -522,10 +600,11 @@
                             </Grid>
                         </Grid>
                     </Border>
-                </Grid>
+                    </ContentControl>
+                </local:DashboardPanel>
+                </ScrollViewer>
             </Grid>
 
-            <!-- ===== Verbrauch ===== -->
             <!-- ===== Speedtest ===== -->
             <Grid x:Name="SpeedView" Grid.Row="1" Visibility="Collapsed">
                 <Grid.ColumnDefinitions>
@@ -611,6 +690,7 @@
                 </Border>
             </Grid>
 
+            <!-- ===== Verbrauch ===== -->
             <Border x:Name="UsageView" Grid.Row="1" Style="{StaticResource Card}" Padding="22,18" Visibility="Collapsed">
                 <Grid>
                     <Grid.RowDefinitions>

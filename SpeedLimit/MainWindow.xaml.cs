@@ -20,6 +20,9 @@ public sealed record UsageRow(string Name, ImageSource? Icon, string DownText, s
 /// <summary>Zeile der Verbindungsliste.</summary>
 public sealed record ConnRow(string Host, string Detail);
 
+/// <summary>Ausgeblendetes Modul in der Anordnen-Leiste.</summary>
+public sealed record ModuleChip(string Id, string Title);
+
 public partial class MainWindow : Window
 {
     readonly Throttler throttler;
@@ -59,10 +62,19 @@ public partial class MainWindow : Window
     double[] totalDownHistory = new double[AppRow.HistoryLength], totalUpHistory = new double[AppRow.HistoryLength];
     int ticks;
 
+    public static readonly DependencyProperty EditingLayoutProperty =
+        DependencyProperty.Register(nameof(EditingLayout), typeof(bool), typeof(MainWindow));
+
+    /// <summary>Anordnen-Modus: Module zeigen Griff und Ausblenden-Knopf.</summary>
+    public bool EditingLayout { get => (bool)GetValue(EditingLayoutProperty); set => SetValue(EditingLayoutProperty, value); }
+
+    readonly Dictionary<string, ContentControl> modules;
+
     // Nur das Layout laden – vom Ladetest genutzt, der ohne Treiber/Adminrechte läuft
     MainWindow()
     {
         InitializeComponent();
+        modules = new() { ["graph"] = ModGraph, ["stats"] = ModStats, ["apps"] = ModApps, ["details"] = ModDetails };
         throttler = null!;
         settings = null!;
         usage = null!;
@@ -81,6 +93,8 @@ public partial class MainWindow : Window
         ConnList.ItemsSource = connRows;
         saveTimer.Tick += (_, _) => SaveNow();
 
+        settings.Layout.Normalize();
+        RebuildLayout();
         ThemeList.ItemsSource = Theme.All;
         ThemeList.SelectedItem = Theme.Get(settings.Theme); // löst ApplyTheme über SelectionChanged aus
         AppRow.UseBits = settings.UseBits;
@@ -942,6 +956,152 @@ public partial class MainWindow : Window
             SettingsOverlay.Visibility = Visibility.Collapsed;
             e.Handled = true;
         }
+    }
+
+    // ---------- Module anordnen (Raster) ----------
+
+    /// <summary>Module gemäß <see cref="Settings.Layout"/> ins Raster setzen.</summary>
+    void RebuildLayout()
+    {
+        foreach (var t in settings.Layout.Tiles)
+        {
+            modules[t.Id].Visibility = t.Hidden ? Visibility.Collapsed : Visibility.Visible;
+            DashboardPanel.SetPlacement(modules[t.Id], t);
+        }
+        DashboardPanel.SetEditing(Board, EditingLayout);
+        HiddenModules.ItemsSource = settings.Layout.Tiles.Where(t => t.Hidden).Select(t => new ModuleChip(t.Id, DashboardLayout.Title(t.Id))).ToList();
+    }
+
+    void SetEditingLayout(bool on)
+    {
+        EditingLayout = on;
+        LayoutToggle.IsChecked = on;
+        LayoutBar.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        if (on) LiveTab.IsChecked = true;
+        RebuildLayout();
+    }
+
+    void LayoutToggle_Click(object sender, RoutedEventArgs e) => SetEditingLayout(LayoutToggle.IsChecked == true);
+
+    void FinishLayout_Click(object sender, RoutedEventArgs e) => SetEditingLayout(false);
+
+    void ResetLayout_Click(object sender, RoutedEventArgs e)
+    {
+        settings.Layout = DashboardLayout.Default();
+        RebuildLayout();
+        ScheduleSave();
+    }
+
+    void HideModule_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: string id }) return;
+        settings.Layout.Hide(id);
+        RebuildLayout();
+        ScheduleSave();
+    }
+
+    void ShowModule_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: string id }) return;
+        if (!settings.Layout.Show(id))
+        {
+            MessageBox.Show(this, $"Für „{DashboardLayout.Title(id)}“ ist gerade kein Platz frei. Verkleinere oder verschiebe zuerst ein anderes Modul.",
+                "FlowCap", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        RebuildLayout();
+        ScheduleSave();
+    }
+
+    // Ziehen: Das Modul folgt der Maus pixelgenau, die Zielmarke zeigt das eingerastete Feld, die anderen weichen gleitend aus.
+    // Gerechnet wird immer vom Ausgangslayout aus, damit Hin- und Herziehen nichts dauerhaft verschiebt.
+    string? dragId;
+    bool dragResize;
+    Point dragStart;
+    Rect dragStartSlot;
+    DashboardLayout? dragBase;
+
+    void ModuleGrip_MouseDown(object sender, MouseButtonEventArgs e) => BeginDrag(sender, e, resize: false);
+
+    void ModuleResize_MouseDown(object sender, MouseButtonEventArgs e) => BeginDrag(sender, e, resize: true);
+
+    void BeginDrag(object sender, MouseButtonEventArgs e, bool resize)
+    {
+        if (sender is not FrameworkElement { Tag: string id } handle) return;
+        dragId = id;
+        dragResize = resize;
+        dragStart = e.GetPosition(Board);
+        dragBase = settings.Layout.Clone();
+        dragStartSlot = Board.SlotOf(dragBase.Get(id));
+        var frame = modules[id];
+        DashboardPanel.SetIsDragged(frame, true);
+        Panel.SetZIndex(frame, 10);
+        if (!resize)
+        {
+            frame.RenderTransform = new TranslateTransform();
+            frame.Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 28, ShadowDepth = 6, Opacity = 0.45 };
+            frame.Opacity = 0.92;
+            DashboardPanel.SetPlacement(DragGhost, dragBase.Get(id));
+            DragGhost.Visibility = Visibility.Visible;
+        }
+        handle.MouseMove += Drag_MouseMove;
+        handle.MouseLeftButtonUp += Drag_MouseUp;
+        handle.LostMouseCapture += Drag_LostCapture;
+        handle.CaptureMouse();
+        e.Handled = true;
+    }
+
+    void Drag_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (dragId is null || dragBase is null) return;
+        var cell = Board.CellSize;
+        var p = e.GetPosition(Board);
+        var dx = (int)Math.Round((p.X - dragStart.X) / cell.Width);
+        var dy = (int)Math.Round((p.Y - dragStart.Y) / cell.Height);
+        var start = dragBase.Get(dragId);
+        var next = dragBase.Clone();
+        var fits = dragResize ? next.Resize(dragId, start.W + dx, start.H + dy) : next.Move(dragId, start.X + dx, start.Y + dy);
+        if (fits && !next.Tiles.SequenceEqual(settings.Layout.Tiles))
+        {
+            settings.Layout = next;
+            RebuildLayout();
+            if (!dragResize) DashboardPanel.SetPlacement(DragGhost, next.Get(dragId));
+        }
+        if (dragResize) return;
+        // Modul unter der Maus halten: Ausgangsposition + Mausweg, abzüglich des Feldes, auf dem es gerade eingerastet liegt
+        var slot = Board.SlotOf(settings.Layout.Get(dragId));
+        if (modules[dragId].RenderTransform is TranslateTransform move)
+        {
+            move.X = dragStartSlot.X + (p.X - dragStart.X) - slot.X;
+            move.Y = dragStartSlot.Y + (p.Y - dragStart.Y) - slot.Y;
+        }
+    }
+
+    void Drag_MouseUp(object sender, MouseButtonEventArgs e) => ((UIElement)sender).ReleaseMouseCapture();
+
+    void Drag_LostCapture(object sender, MouseEventArgs e)
+    {
+        var handle = (UIElement)sender;
+        handle.MouseMove -= Drag_MouseMove;
+        handle.MouseLeftButtonUp -= Drag_MouseUp;
+        handle.LostMouseCapture -= Drag_LostCapture;
+        if (dragId is null) return;
+        var frame = modules[dragId];
+        // In die Zielmarke gleiten lassen
+        if (frame.RenderTransform is TranslateTransform move)
+        {
+            var ease = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut };
+            var glide = TimeSpan.FromMilliseconds(160);
+            move.BeginAnimation(TranslateTransform.XProperty, new System.Windows.Media.Animation.DoubleAnimation(move.X, 0, glide) { EasingFunction = ease });
+            move.BeginAnimation(TranslateTransform.YProperty, new System.Windows.Media.Animation.DoubleAnimation(move.Y, 0, glide) { EasingFunction = ease });
+        }
+        frame.Effect = null;
+        frame.Opacity = 1;
+        Panel.SetZIndex(frame, 0);
+        DashboardPanel.SetIsDragged(frame, false);
+        DragGhost.Visibility = Visibility.Collapsed;
+        ScheduleSave();
+        (dragId, dragBase) = (null, null);
     }
 
     void Theme_Changed(object sender, SelectionChangedEventArgs e)

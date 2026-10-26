@@ -45,9 +45,21 @@ public readonly record struct PacketInfo(bool V4, byte Proto, int L4Offset, usho
         BinaryPrimitives.WriteUInt16BigEndian(p[L4Offset..], originalPort);
     }
 
-    public static void SetSource(Span<byte> p, ReadOnlySpan<byte> ip4) => ip4.CopyTo(p[12..16]);
+    /// <summary>Adresse der Gegenseite: bei ausgehenden Paketen das Ziel, bei eingehenden der Absender.</summary>
+    public System.Net.IPAddress RemoteAddress(ReadOnlySpan<byte> p, bool outbound) =>
+        new(V4 ? (outbound ? p[16..20] : p[12..16]) : (outbound ? p[24..40] : p[8..24]));
 
-    public static void SetDestination(Span<byte> p, ReadOnlySpan<byte> ip4) => ip4.CopyTo(p[16..20]);
+    /// <summary>Absender ersetzen; 4 Byte für IPv4-, 16 Byte für IPv6-Pakete.</summary>
+    public static void SetSource(Span<byte> p, ReadOnlySpan<byte> ip) => ip.CopyTo(ip.Length == 4 ? p[12..16] : p[8..24]);
+
+    /// <summary>Ziel ersetzen; 4 Byte für IPv4-, 16 Byte für IPv6-Pakete.</summary>
+    public static void SetDestination(Span<byte> p, ReadOnlySpan<byte> ip) => ip.CopyTo(ip.Length == 4 ? p[16..20] : p[24..40]);
+
+    /// <summary>Ziel-Adresse (4 bzw. 16 Byte).</summary>
+    public byte[] Destination(ReadOnlySpan<byte> p) => (V4 ? p[16..20] : p[24..40]).ToArray();
+
+    /// <summary>Absender-Adresse (4 bzw. 16 Byte).</summary>
+    public byte[] Source(ReadOnlySpan<byte> p) => (V4 ? p[12..16] : p[8..24]).ToArray();
 
     /// <summary>MSS-Option eines TCP-SYN (bzw. SYN+ACK) auf höchstens <paramref name="maxMss"/> begrenzen, damit Segmente samt Tunnel-Hülle durchpassen.</summary>
     public static void ClampMss(Span<byte> p, int maxMss)
@@ -69,12 +81,12 @@ public readonly record struct PacketInfo(bool V4, byte Proto, int L4Offset, usho
     }
 
     /// <summary>
-    /// Zu großes IPv4-TCP-Paket (z. B. von der Segmentierungs-Auslagerung der Netzwerkkarte) in Pakete bis <paramref name="mtu"/> Byte zerlegen.
+    /// Zu großes TCP-Paket (z. B. von der Segmentierungs-Auslagerung der Netzwerkkarte) in Pakete bis <paramref name="mtu"/> Byte zerlegen.
     /// Prüfsummen sind danach korrekt. Andere Pakete kommen unverändert zurück.
     /// </summary>
     public static List<byte[]> Segment(byte[] p, int mtu)
     {
-        if (p.Length <= mtu || !TryParse(p, out var i) || !i.V4 || !i.Tcp) return [p];
+        if (p.Length <= mtu || !TryParse(p, out var i) || !i.Tcp) return [p];
         var headers = i.L4Offset + (p[i.L4Offset + 12] >> 4) * 4;
         var chunk = mtu - headers;
         if (chunk <= 0) return [p];
@@ -88,8 +100,12 @@ public readonly record struct PacketInfo(bool V4, byte Proto, int L4Offset, usho
             var seg = new byte[headers + n];
             p.AsSpan(0, headers).CopyTo(seg);
             payload.Slice(off, n).CopyTo(seg.AsSpan(headers));
-            BinaryPrimitives.WriteUInt16BigEndian(seg.AsSpan(2), (ushort)seg.Length);
-            BinaryPrimitives.WriteUInt16BigEndian(seg.AsSpan(4), (ushort)(ipId + result.Count));
+            if (i.V4)
+            {
+                BinaryPrimitives.WriteUInt16BigEndian(seg.AsSpan(2), (ushort)seg.Length);
+                BinaryPrimitives.WriteUInt16BigEndian(seg.AsSpan(4), (ushort)(ipId + result.Count));
+            }
+            else BinaryPrimitives.WriteUInt16BigEndian(seg.AsSpan(4), (ushort)(seg.Length - 40)); // IPv6: Nutzlastlänge ohne Kopf
             BinaryPrimitives.WriteUInt32BigEndian(seg.AsSpan(i.L4Offset + 4), seq + (uint)off);
             if (off + n < payload.Length) seg[i.L4Offset + 13] &= unchecked((byte)~0x09); // FIN/PSH nur am letzten Stück
             FixChecksums(seg);
@@ -98,22 +114,34 @@ public readonly record struct PacketInfo(bool V4, byte Proto, int L4Offset, usho
         return result;
     }
 
-    /// <summary>IPv4-Kopf- und TCP/UDP-Prüfsumme neu berechnen (nach dem Umschreiben von Adressen/Ports).</summary>
+    /// <summary>IPv4-Kopf- und TCP/UDP-Prüfsumme neu berechnen (nach dem Umschreiben von Adressen/Ports); IPv6 hat keine Kopf-Prüfsumme.</summary>
     public static void FixChecksums(Span<byte> p)
     {
-        var ihl = (p[0] & 0xF) * 4;
-        var total = BinaryPrimitives.ReadUInt16BigEndian(p[2..]);
-        p[10] = p[11] = 0;
-        BinaryPrimitives.WriteUInt16BigEndian(p[10..], Checksum(0, p[..ihl]));
+        var v4 = p[0] >> 4 == 4;
+        int l4Start, l4End, addrStart, addrEnd;
+        byte proto;
+        if (v4)
+        {
+            l4Start = (p[0] & 0xF) * 4;
+            l4End = BinaryPrimitives.ReadUInt16BigEndian(p[2..]);
+            p[10] = p[11] = 0;
+            BinaryPrimitives.WriteUInt16BigEndian(p[10..], Checksum(0, p[..l4Start]));
+            (proto, addrStart, addrEnd) = (p[9], 12, 20);
+        }
+        else
+        {
+            l4Start = 40;
+            l4End = 40 + BinaryPrimitives.ReadUInt16BigEndian(p[4..]);
+            (proto, addrStart, addrEnd) = (p[6], 8, 40);
+        }
 
-        var proto = p[9];
-        var l4 = p[ihl..total];
+        var l4 = p[l4Start..l4End];
         var csumOffset = proto switch { 6 => 16, 17 => 6, _ => -1 };
         if (csumOffset < 0 || l4.Length < csumOffset + 2) return;
         l4[csumOffset] = l4[csumOffset + 1] = 0;
         // Pseudo-Header: Quell-/Zieladresse, Protokoll, Länge
         uint sum = 0;
-        for (var i = 12; i < 20; i += 2) sum += BinaryPrimitives.ReadUInt16BigEndian(p[i..]);
+        for (var i = addrStart; i < addrEnd; i += 2) sum += BinaryPrimitives.ReadUInt16BigEndian(p[i..]);
         sum += proto;
         sum += (uint)l4.Length;
         var c = Checksum(sum, l4);

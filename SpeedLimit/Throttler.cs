@@ -56,9 +56,12 @@ public sealed class Throttler : IDisposable
     ProxyRelay? relay;
     // VPN pro Programm: Programm → Tunnel; NAT merkt sich je lokalem Port die echte Absenderadresse und eine Paket-Adresse fürs Zurückspielen
     Dictionary<string, WireGuardTunnel> vpnApps = [];
-    readonly Dictionary<(bool Tcp, ushort Port), (byte[] LocalIp, WinDivertAddress Addr, string App)> vpnNat = [];
+    // OrigRemote: nur bei umgeleiteten DNS-Anfragen – der ursprüngliche DNS-Server, als Absender der Antwort wiederherzustellen
+    readonly Dictionary<(bool V4, bool Tcp, ushort Port), (byte[] LocalIp, WinDivertAddress Addr, string App, byte[]? OrigRemote)> vpnNat = [];
+    WireGuardTunnel? dnsTunnel;
     readonly HashSet<WireGuardTunnel> subscribed = [];
     HashSet<string> capBlocked = [];
+    Dictionary<string, HashSet<System.Net.IPAddress>> blockedTargets = [];
     HashSet<string>? priority; // null = Spielmodus nicht aktiv
     Limit gameLimit;
     readonly Dictionary<(string Name, bool Up), Queue<(byte[] Data, WinDivertAddress Addr)>> queues = [];
@@ -126,6 +129,15 @@ public sealed class Throttler : IDisposable
         lock (gate) capBlocked = set;
     }
 
+    /// <summary>Programm → gesperrte Ziel-Adressen (Firewall pro Verbindung). Gilt auch für Proxy- und VPN-Verkehr.</summary>
+    public void SetBlockedTargets(Dictionary<string, HashSet<System.Net.IPAddress>> map)
+    {
+        lock (gate) blockedTargets = map;
+    }
+
+    bool IsTargetBlocked(string? name, PacketInfo info, ReadOnlySpan<byte> pkt, bool up) =>
+        !paused && name is not null && blockedTargets.TryGetValue(name, out var targets) && targets.Contains(info.RemoteAddress(pkt, up));
+
     /// <summary>Spielmodus: alle Programme außer <paramref name="priorityApps"/> teilen sich <paramref name="limit"/>; null = aus.</summary>
     public void SetGameMode(IEnumerable<string>? priorityApps, Limit limit)
     {
@@ -155,6 +167,36 @@ public sealed class Throttler : IDisposable
         }
     }
 
+    /// <summary>
+    /// DNS über diesen Tunnel: alle DNS-Anfragen von Windows (Port 53) gehen an den DNS-Server aus der Config, solange der Tunnel steht.
+    /// null = aus. Programme fragen Namen über den Windows-DNS-Dienst ab, deshalb lässt sich das nicht pro Programm trennen.
+    /// </summary>
+    public void SetDnsTunnel(WireGuardTunnel? tunnel)
+    {
+        lock (gate)
+        {
+            dnsTunnel = tunnel;
+            if (tunnel is not null && subscribed.Add(tunnel)) tunnel.PacketReceived += OnTunnelPacket;
+        }
+    }
+
+    /// <summary>DNS-Anfrage in den DNS-Tunnel umleiten; false = nicht zuständig (normal weiter). Läuft unter <see cref="gate"/>.</summary>
+    bool RedirectDns(PacketInfo info, byte[] buf, uint len, WinDivertAddress addr, string? name)
+    {
+        if (info.DstPort != 53 || name == self || dnsTunnel is not { } t) return false;
+        var (local, dns) = info.V4 ? (t.Address, t.DnsServer) : (t.Address6, null as System.Net.IPAddress); // shortcut: IPv6-DNS geht direkt, DNS6 der Config wird nicht genutzt
+        if (local is null || dns is null || t.State != TunnelState.Connected) return false; // Tunnel weg → normaler DNS statt gar keinem
+        var p = buf[..(int)len];
+        vpnNat[(info.V4, info.Tcp, info.SrcPort)] = (info.Source(p), addr, name ?? Unknown, info.Destination(p));
+        PacketInfo.SetDestination(p, dns.GetAddressBytes());
+        PacketInfo.SetSource(p, local.GetAddressBytes());
+        if (info.Tcp) PacketInfo.ClampMss(p, t.Mtu - 40);
+        PacketInfo.FixChecksums(p);
+        Count((name ?? Unknown, true), len);
+        foreach (var segment in PacketInfo.Segment(p, t.Mtu)) t.Send(segment);
+        return true;
+    }
+
     void EnsureRelay()
     {
         if (relay is not null) return;
@@ -165,14 +207,17 @@ public sealed class Throttler : IDisposable
     /// <summary>Antwort aus dem Tunnel an das Programm zurückgeben (Zieladresse zurück auf die echte lokale Adresse).</summary>
     void OnTunnelPacket(WireGuardTunnel tunnel, byte[] p)
     {
-        if (!PacketInfo.TryParse(p, out var i) || !i.V4 || !p.AsSpan(16, 4).SequenceEqual(tunnel.Address.GetAddressBytes())) return;
+        if (!PacketInfo.TryParse(p, out var i) || (i.V4 ? tunnel.Address : tunnel.Address6) is not { } local
+            || !i.Destination(p).AsSpan().SequenceEqual(local.GetAddressBytes())) return;
         lock (gate)
         {
-            // Nur Antworten auf Verbindungen, die ein zugewiesenes Programm selbst aufgebaut hat
-            if (!vpnNat.TryGetValue((i.Tcp, i.DstPort), out var nat) || vpnApps.GetValueOrDefault(nat.App) != tunnel) return;
+            // Nur Antworten auf Verbindungen, die ein zugewiesenes Programm (bzw. die DNS-Umleitung) selbst aufgebaut hat
+            if (!vpnNat.TryGetValue((i.V4, i.Tcp, i.DstPort), out var nat)
+                || (nat.OrigRemote is null ? vpnApps.GetValueOrDefault(nat.App) : dnsTunnel) != tunnel) return;
             if (IsBlocked(nat.App)) return;
             PacketInfo.SetDestination(p, nat.LocalIp);
-            if (i.Tcp) PacketInfo.ClampMss(p, tunnel.Mtu - 40);
+            if (nat.OrigRemote is { } remote) PacketInfo.SetSource(p, remote);
+            if (i.Tcp) PacketInfo.ClampMss(p, tunnel.Mtu - (i.V4 ? 40 : 60));
             var addr = nat.Addr;
             addr.Outbound = false;
             WinDivert.WinDivertHelperCalcChecksums(p, (uint)p.Length, ref addr, 0);
@@ -184,11 +229,12 @@ public sealed class Throttler : IDisposable
     /// <summary>Paket eines VPN-Programms in den Tunnel schicken. Ist der Tunnel getrennt, wird verworfen – nichts geht am VPN vorbei.</summary>
     void SendToTunnel(WireGuardTunnel tunnel, string app, PacketInfo info, byte[] buf, uint len, WinDivertAddress addr)
     {
-        if (!info.V4 || IsBlocked(app)) return; // IPv6 kann der Tunnel nicht → sperren statt durchlassen
+        var local = info.V4 ? tunnel.Address : tunnel.Address6;
+        if (local is null || IsBlocked(app)) return; // Tunnel ohne IPv6-Adresse → IPv6 sperren statt am VPN vorbei
         var p = buf[..(int)len];
-        vpnNat[(info.Tcp, info.SrcPort)] = (p[12..16], addr, app);
-        if (info.Tcp) PacketInfo.ClampMss(p, tunnel.Mtu - 40); // 40 = IPv4- + TCP-Kopf
-        PacketInfo.SetSource(p, tunnel.Address.GetAddressBytes());
+        vpnNat[(info.V4, info.Tcp, info.SrcPort)] = (info.Source(p), addr, app, null);
+        if (info.Tcp) PacketInfo.ClampMss(p, tunnel.Mtu - (info.V4 ? 40 : 60)); // IP- + TCP-Kopf
+        PacketInfo.SetSource(p, local.GetAddressBytes());
         PacketInfo.FixChecksums(p);
         Count((app, true), len);
         // shortcut: Bandbreiten-Limits gelten nicht für VPN-Verkehr (nur Sperre und Zählung), bei Bedarf über Throttle() leiten
@@ -233,6 +279,7 @@ public sealed class Throttler : IDisposable
         var pkt = buf.AsSpan(0, (int)len);
         var parsed = PacketInfo.TryParse(pkt, out var info);
         var name = parsed ? Ports.Lookup(info.Tcp, up ? info.SrcPort : info.DstPort) : null;
+        var reflected = false; // zum/vom Relay gespiegelt: Adressen vertauscht, Ziel-Sperre schon geprüft
 
         if (relay is { } r && parsed && up)
         {
@@ -241,6 +288,7 @@ public sealed class Throttler : IDisposable
                 // Antwort des Relays zurück an das Programm – zählt als dessen Download
                 if (!r.TryGetNat(info.DstPort, out var nat)) return;
                 info.ReflectFromRelay(pkt, nat.RemotePort);
+                reflected = true;
                 addr.Outbound = false;
                 WinDivert.WinDivertHelperCalcChecksums(buf, len, ref addr, 0);
                 name = nat.App;
@@ -249,12 +297,15 @@ public sealed class Throttler : IDisposable
             else
             {
                 name = r.Lookup(info.Tcp, info.SrcPort) ?? name;
+                // DNS braucht kein Programm (fragt fast immer der Windows-DNS-Dienst) – nicht zurückhalten, das kostete jede Anfrage 50 ms
+                if (!IsTargetBlocked(name, info, pkt, up) && RedirectDns(info, buf, len, addr, name)) return;
                 // Neue Verbindung, deren Programm noch unbekannt ist: kurz auf das Socket-Ereignis warten, sonst ginge sie am Proxy vorbei
                 if (name is null && canHold && (info.Syn || info.Udp))
                 {
                     held.Add((buf[..(int)len], addr, clock.Elapsed.TotalSeconds + HoldSeconds));
                     return;
                 }
+                if (IsTargetBlocked(name, info, pkt, up)) return; // vor Proxy/VPN: das Ziel ist dort noch das echte
                 if (name is not null && vpnApps.TryGetValue(name, out var tunnel))
                 {
                     SendToTunnel(tunnel, name, info, buf, len, addr);
@@ -268,6 +319,7 @@ public sealed class Throttler : IDisposable
                     if (r.TryGetNat(info.SrcPort, out _))
                     {
                         info.ReflectToRelay(pkt, r.Port);
+                        reflected = true;
                         addr.Outbound = false;
                         WinDivert.WinDivertHelperCalcChecksums(buf, len, ref addr, 0);
                     }
@@ -277,6 +329,7 @@ public sealed class Throttler : IDisposable
 
         var key = (name ?? Unknown, up);
         if (IsBlocked(key.Item1)) return; // gesperrt: verwerfen
+        if (parsed && !reflected && IsTargetBlocked(name, info, pkt, up)) return;
         Throttle(key, buf, len, addr);
     }
 

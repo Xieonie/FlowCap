@@ -49,6 +49,10 @@ public sealed class WireGuardTunnel : IDisposable
 
     public string Name { get; }
     public IPAddress Address => cfg.Address;
+    /// <summary>IPv6-Adresse im Tunnel; null = Tunnel kann kein IPv6 (dann wird IPv6 der Programme gesperrt).</summary>
+    public IPAddress? Address6 => cfg.Address6;
+    /// <summary>DNS-Server des Anbieters aus der Config (DNS = …), für „DNS über den Tunnel“.</summary>
+    public IPAddress? DnsServer => cfg.Dns;
     public int Mtu => cfg.Mtu;
     public long BytesSent { get; private set; }
     public long BytesReceived { get; private set; }
@@ -128,6 +132,10 @@ public sealed class WireGuardTunnel : IDisposable
         catch (SocketException)
         {
             // Netz weg – die Überwachung meldet "getrennt"
+        }
+        catch (ObjectDisposedException)
+        {
+            // Tunnel wurde gerade entfernt, der Throttler kennt ihn aber noch einen Moment
         }
     }
 
@@ -209,7 +217,10 @@ public sealed class WireGuardTunnel : IDisposable
         lastReceived = Now;
         if (plain.Length == 0) return null; // Keepalive
         lastReceivedData = lastReceived;
-        var length = plain[0] >> 4 == 4 && plain.Length >= 20 ? BinaryPrimitives.ReadUInt16BigEndian(plain.AsSpan(2)) : plain.Length;
+        // Auffüllung abschneiden: Länge steht im IP-Kopf (IPv6: Nutzlast ohne die 40 Byte Kopf)
+        var length = plain[0] >> 4 == 4 && plain.Length >= 20 ? BinaryPrimitives.ReadUInt16BigEndian(plain.AsSpan(2))
+            : plain[0] >> 4 == 6 && plain.Length >= 40 ? 40 + BinaryPrimitives.ReadUInt16BigEndian(plain.AsSpan(4))
+            : plain.Length;
         BytesReceived += length;
         return length <= plain.Length ? plain[..length] : null;
     }

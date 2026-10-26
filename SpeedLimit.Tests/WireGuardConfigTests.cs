@@ -27,6 +27,9 @@ public class WireGuardConfigTests
         Assert.Equal(32, c.PrivateKey.Length);
         Assert.Equal(new byte[32], c.PresharedKey);
         Assert.Equal(1420, c.Mtu);
+        Assert.Equal("fd00::2", c.Address6?.ToString());
+        Assert.Equal("10.2.0.1", c.Dns?.ToString());
+        Assert.Null(c.Dns6);
     }
 
     [Theory]

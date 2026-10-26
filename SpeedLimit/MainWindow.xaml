@@ -102,6 +102,22 @@
             </Setter>
         </Style>
         <!-- Rahmen um jedes Live-Modul. Im Anordnen-Modus: ganze Fläche ziehbar, Namensschild, Ausblenden oben rechts, Eckgriff unten rechts -->
+        <!-- Programm-Icon; ohne Icon (Dienste, Konsolenprogramme) ein Anfangsbuchstabe im Akzent-Kästchen -->
+        <ControlTemplate x:Key="AppIcon" TargetType="ContentControl">
+            <Grid>
+                <Border x:Name="Fallback" CornerRadius="6" Background="{DynamicResource AccentSoft}" Visibility="Collapsed">
+                    <TextBlock Text="{Binding Initial}" Foreground="{DynamicResource Accent}" FontWeight="SemiBold" FontSize="{TemplateBinding FontSize}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <Image Source="{Binding Icon}" />
+            </Grid>
+            <ControlTemplate.Triggers>
+                <DataTrigger Binding="{Binding Icon}" Value="{x:Null}">
+                    <Setter TargetName="Fallback" Property="Visibility" Value="Visible" />
+                </DataTrigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
         <ControlTemplate x:Key="ModuleFrame" TargetType="ContentControl">
             <Grid>
                 <ContentPresenter x:Name="Body" />
@@ -407,7 +423,7 @@
                                                 <ColumnDefinition Width="96" />
                                                 <ColumnDefinition Width="120" />
                                             </Grid.ColumnDefinitions>
-                                            <Image Source="{Binding Icon}" Width="22" Height="22" HorizontalAlignment="Left" VerticalAlignment="Center" />
+                                            <ContentControl Template="{StaticResource AppIcon}" Width="22" Height="22" FontSize="12" Focusable="False" HorizontalAlignment="Left" VerticalAlignment="Center" />
                                             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
                                                 <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" MaxWidth="260" />
                                                 <Border CornerRadius="9" Padding="8,1" Margin="10,0,0,0" VerticalAlignment="Center"
@@ -469,7 +485,7 @@
                             <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="20">
                                 <StackPanel>
                                     <DockPanel>
-                                        <Image Source="{Binding Icon}" Width="40" Height="40" Margin="0,0,14,0" />
+                                        <ContentControl Template="{StaticResource AppIcon}" Width="40" Height="40" FontSize="20" Focusable="False" Margin="0,0,14,0" />
                                         <StackPanel VerticalAlignment="Center">
                                             <TextBlock Text="{Binding Name}" FontSize="18" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                                             <TextBlock Style="{StaticResource Caption}">
@@ -554,6 +570,20 @@
                                         </DockPanel>
                                     </Border>
 
+                                    <!-- Upload-Warnung -->
+                                    <Border Margin="0,12,0,0" Padding="14,10" CornerRadius="10" Background="{DynamicResource PanelInner}">
+                                        <DockPanel>
+                                            <CheckBox DockPanel.Dock="Right" IsChecked="{Binding UploadAlarmOff}" MinWidth="0" VerticalAlignment="Center" Margin="12,0,0,0"
+                                                      AutomationProperties.Name="Keine Upload-Warnung" />
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock FontWeight="SemiBold">
+                                                    <Run FontFamily="{StaticResource Icons}" Text="&#xE898;" Foreground="{DynamicResource UpBrush}" /> Keine Upload-Warnung
+                                                </TextBlock>
+                                                <TextBlock Text="Für Programme, die absichtlich viel hochladen (Streaming, Backups)" Style="{StaticResource Caption}" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                        </DockPanel>
+                                    </Border>
+
                                     <!-- VPN -->
                                     <Border Margin="0,12,0,0" Padding="14" CornerRadius="10" Background="{DynamicResource PanelInner}">
                                         <StackPanel>
@@ -585,15 +615,43 @@
 
                                     <!-- Verbindungen -->
                                     <TextBlock x:Name="ConnHeader" Style="{StaticResource Section}" Text="VERBINDUNGEN" />
+                                    <TextBlock x:Name="ConnCountries" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,-4,0,8" Visibility="Collapsed"
+                                               ToolTip="Länderdaten: IP Geolocation by DB-IP (db-ip.com), CC BY 4.0 – offline, ohne Anfragen an einen Dienst" />
                                     <ItemsControl x:Name="ConnList" Focusable="False">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
-                                                <Border Padding="10,6" Margin="0,0,0,4" CornerRadius="8" Background="{DynamicResource PanelInner}">
-                                                    <StackPanel>
-                                                        <TextBlock Text="{Binding Host}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip="{Binding Host}" />
-                                                        <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}" />
-                                                    </StackPanel>
+                                                <Border x:Name="Card" Padding="10,6" Margin="0,0,0,4" CornerRadius="8" Background="{DynamicResource PanelInner}">
+                                                    <DockPanel>
+                                                        <Button DockPanel.Dock="Right" Content="{Binding Action}" Click="ToggleTarget_Click" VerticalAlignment="Center"
+                                                                Padding="10,2" Margin="8,0,0,0" FontSize="12"
+                                                                ToolTip="Nur diese Adresse für dieses Programm sperren bzw. wieder freigeben" />
+                                                        <Border x:Name="FlagBox" DockPanel.Dock="Left" Width="24" Height="18" Margin="0,0,10,0" CornerRadius="3"
+                                                                VerticalAlignment="Center" ToolTip="{Binding Country}">
+                                                            <Border.Background>
+                                                                <ImageBrush ImageSource="{Binding Flag}" Stretch="UniformToFill" />
+                                                            </Border.Background>
+                                                        </Border>
+                                                        <StackPanel>
+                                                            <TextBlock Text="{Binding Host}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip="{Binding Host}" />
+                                                            <TextBlock Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis">
+                                                                <Run Text="{Binding Detail, Mode=OneWay}" /><Run x:Name="Sep" Text=" · " /><Run Text="{Binding Country, Mode=OneWay}" />
+                                                            </TextBlock>
+                                                        </StackPanel>
+                                                    </DockPanel>
                                                 </Border>
+                                                <DataTemplate.Triggers>
+                                                    <DataTrigger Binding="{Binding Country}" Value="">
+                                                        <Setter TargetName="Sep" Property="Text" Value="" />
+                                                    </DataTrigger>
+                                                    <!-- Ohne Flagge (lokale Adresse, unbekanntes Land) Platz halten, damit die Zeilen bündig bleiben -->
+                                                    <DataTrigger Binding="{Binding Flag}" Value="{x:Null}">
+                                                        <Setter TargetName="FlagBox" Property="Background" Value="{DynamicResource Hover}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Blocked}" Value="True">
+                                                        <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Danger}" />
+                                                        <Setter TargetName="Card" Property="BorderThickness" Value="1" />
+                                                    </DataTrigger>
+                                                </DataTemplate.Triggers>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
@@ -701,6 +759,8 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
                     <DockPanel>
                         <Button x:Name="PingButton" DockPanel.Dock="Right" Content="Start" Click="PingTest_Click" MinWidth="120" Height="34"
@@ -739,6 +799,21 @@
 
                     <local:RateGraph x:Name="PingGraph" Grid.Row="2" ShowGrid="True" Unit="ms" />
                     <TextBlock x:Name="PingStatus" Grid.Row="3" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,10,0,0" />
+
+                    <!-- Verlauf der Ping-Anzeige (Cloudflare, alle 5 s) über Tage -->
+                    <DockPanel Grid.Row="4" Margin="0,18,0,8">
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                            <RadioButton x:Name="PingHistDay" Content="24 Std." GroupName="PingHist" Style="{StaticResource Pill}" IsChecked="True" Checked="PingHistory_Changed" />
+                            <RadioButton x:Name="PingHistWeek" Content="7 Tage" GroupName="PingHist" Style="{StaticResource Pill}" Checked="PingHistory_Changed" />
+                            <RadioButton x:Name="PingHistMonth" Content="30 Tage" GroupName="PingHist" Style="{StaticResource Pill}" Checked="PingHistory_Changed" />
+                        </StackPanel>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="VERLAUF" Style="{StaticResource Section}" Margin="0" />
+                            <TextBlock x:Name="PingHistorySummary" Style="{StaticResource Caption}" TextWrapping="Wrap"
+                                       ToolTip="Aus der Ping-Anzeige (Cloudflare 1.1.1.1, alle 5 Sekunden, solange FlowCap läuft). Linie = Mittel, helle Linie = Maximum, Lücken = keine Messung." />
+                        </StackPanel>
+                    </DockPanel>
+                    <local:RateGraph x:Name="PingHistory" Grid.Row="5" ShowGrid="True" Unit="ms" />
                 </Grid>
             </Border>
 
@@ -795,7 +870,7 @@
                                         <ColumnDefinition Width="110" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <Image Source="{Binding Icon}" Width="22" Height="22" HorizontalAlignment="Left" VerticalAlignment="Center" />
+                                    <ContentControl Template="{StaticResource AppIcon}" Width="22" Height="22" FontSize="12" Focusable="False" HorizontalAlignment="Left" VerticalAlignment="Center" />
                                     <TextBlock Grid.Column="1" Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                                     <TextBlock Grid.Column="2" Text="{Binding DownText}" Foreground="{DynamicResource DownBrush}" VerticalAlignment="Center" />
                                     <TextBlock Grid.Column="3" Text="{Binding UpText}" Foreground="{DynamicResource UpBrush}" VerticalAlignment="Center" />
@@ -928,6 +1003,17 @@
 
                         <TextBlock Text="BENACHRICHTIGUNGEN" Style="{StaticResource Section}" />
                         <CheckBox x:Name="NotifyNewAppsBox" Content="Melden, wenn ein Programm zum ersten Mal ins Internet geht" Click="NotifyNewApps_Click" Foreground="{DynamicResource Ink}" />
+                        <DockPanel Margin="0,8,0,0">
+                            <ComboBox x:Name="UploadAlarmBox" DockPanel.Dock="Right" Width="150" SelectionChanged="UploadAlarm_Changed"
+                                      AutomationProperties.Name="Schwelle für die Upload-Warnung">
+                                <ComboBoxItem Content="aus" Tag="0" />
+                                <ComboBoxItem Content="100 MB" Tag="100" />
+                                <ComboBoxItem Content="250 MB" Tag="250" />
+                                <ComboBoxItem Content="500 MB" Tag="500" />
+                                <ComboBoxItem Content="1 GB" Tag="1000" />
+                            </ComboBox>
+                            <TextBlock Text="Warnen, wenn ein Programm in 10 Minuten mehr hochlädt als" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,10,0" />
+                        </DockPanel>
 
                         <TextBlock Text="SPIELMODUS" Style="{StaticResource Section}" />
                         <CheckBox x:Name="GameModeBox" Content="Spielmodus automatisch einschalten" Click="GameMode_Click" Foreground="{DynamicResource Ink}" />
@@ -1038,6 +1124,9 @@
                                             </Button>
                                             <CheckBox DockPanel.Dock="Right" Content="Kill-Switch" IsChecked="{Binding KillSwitch}" Foreground="{DynamicResource Ink}" MinWidth="0"
                                                       VerticalAlignment="Center" ToolTip="Verliert der Tunnel die Verbindung oder wird FlowCap beendet, werden die zugewiesenen Programme beendet" />
+                                            <CheckBox DockPanel.Dock="Right" Content="DNS über Tunnel" IsChecked="{Binding DnsThroughTunnel}" Foreground="{DynamicResource Ink}" MinWidth="0"
+                                                      VerticalAlignment="Center" Margin="0,0,12,0"
+                                                      ToolTip="Alle DNS-Anfragen von Windows laufen über den DNS-Server dieses VPN, solange er verbunden ist – auch die anderer Programme. So sieht dein Internetanbieter nicht, welche Seiten aufgerufen werden. Braucht DNS = … in der Config und ein zugewiesenes Programm." />
                                             <StackPanel VerticalAlignment="Center">
                                                 <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
                                                 <TextBlock Text="{Binding Status}" Style="{StaticResource Caption}" TextWrapping="Wrap" />

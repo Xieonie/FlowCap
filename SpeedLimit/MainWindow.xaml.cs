@@ -15,10 +15,16 @@ using System.Windows.Threading;
 namespace SpeedLimit;
 
 /// <summary>Zeile der Verbrauchsansicht.</summary>
-public sealed record UsageRow(string Name, ImageSource? Icon, string DownText, string UpText, string TotalText, double DownShare, double TotalShare);
+public sealed record UsageRow(string Name, ImageSource? Icon, string DownText, string UpText, string TotalText, double DownShare, double TotalShare)
+{
+    public string Initial => AppRow.Initials(Name);
+}
 
 /// <summary>Zeile der Verbindungsliste.</summary>
-public sealed record ConnRow(string Host, string Detail);
+public sealed record ConnRow(string Host, string Detail, string Country, string Ip, bool Blocked, ImageSource? Flag = null)
+{
+    public string Action => Blocked ? "Freigeben" : "Sperren";
+}
 
 /// <summary>Ausgeblendetes Modul in der Anordnen-Leiste.</summary>
 public sealed record ModuleChip(string Id, string Title);
@@ -110,6 +116,8 @@ public partial class MainWindow : Window
         GameEditor.Content = gameRow;
         GameModeBox.IsChecked = settings.GameModeEnabled;
         NotifyNewAppsBox.IsChecked = settings.NotifyNewApps;
+        UploadAlarmBox.SelectedItem = UploadAlarmBox.Items.Cast<ComboBoxItem>().FirstOrDefault(i => (string)i.Tag == settings.UploadAlarmMB.ToString())
+            ?? UploadAlarmBox.Items[2];
         UpdatePriorityText();
 
         settings.EnsureProfiles();
@@ -128,7 +136,7 @@ public partial class MainWindow : Window
 
         foreach (var v in settings.Vpns) VpnChoices.Add(v.Name);
         VpnList.ItemsSource = settings.Vpns;
-        foreach (var v in settings.Vpns) v.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(VpnEntry.KillSwitch)) ScheduleSave(); };
+        foreach (var v in settings.Vpns) v.PropertyChanged += Vpn_PropertyChanged;
         void ShowVpnEmpty() => VpnEmpty.Visibility = settings.Vpns.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         settings.Vpns.CollectionChanged += (_, _) => ShowVpnEmpty();
         ShowVpnEmpty();
@@ -145,6 +153,8 @@ public partial class MainWindow : Window
     {
         ApplyProxies();
         ApplyVpns();
+        ApplyBlockedTargets();
+        _ = GeoIp.Current; // Länder-Datenbank schon im Hintergrund laden
         Tick();
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         timer.Tick += (_, _) => Tick();
@@ -177,6 +187,7 @@ public partial class MainWindow : Window
                 var row = new AppRow(name, icon, settings.Limits.GetValueOrDefault(name), OnLimitChanged);
                 row.Init(settings.PriorityApps.Contains(name), settings.DataCaps.TryGetValue(name, out var cap) ? cap : null,
                     settings.AppProxies.GetValueOrDefault(name), settings.AppVpns.GetValueOrDefault(name));
+                row.UploadAlarmOff = settings.UploadAlarmOff.Contains(name);
                 row.PropertyChanged += Row_PropertyChanged;
                 byName[name] = row;
                 rows.Add(row);
@@ -193,6 +204,7 @@ public partial class MainWindow : Window
             foreach (var name in sending)
                 usage.Add(today, name, traffic.GetValueOrDefault((name, false)), traffic.GetValueOrDefault((name, true)));
             CheckNewApps(sending);
+            CheckUploads(sending, traffic);
             CheckCaps();
             UpdateGameMode(names.Values.ToHashSet());
 
@@ -213,6 +225,7 @@ public partial class MainWindow : Window
             if (ticks % 3600 == 30 && settings.AutoUpdate && DateTime.Now - settings.LastUpdateCheck > TimeSpan.FromDays(1)) _ = CheckUpdateAsync(manual: false);
             ticks++;
             if (UsageView.IsVisible && ticks % 5 == 0) RefreshUsage();
+            if (PingView.IsVisible && ticks % 30 == 0) RefreshPingHistory();
             if (ticks % 60 == 0) SaveUsage();
         }
         finally
@@ -252,6 +265,12 @@ public partial class MainWindow : Window
             if (row.IsPriority) settings.PriorityApps.Add(row.Name);
             else settings.PriorityApps.Remove(row.Name);
             UpdatePriorityText();
+            ScheduleSave();
+        }
+        else if (e.PropertyName == nameof(AppRow.UploadAlarmOff))
+        {
+            if (row.UploadAlarmOff) settings.UploadAlarmOff.Add(row.Name);
+            else settings.UploadAlarmOff.Remove(row.Name);
             ScheduleSave();
         }
         else if (e.PropertyName == nameof(AppRow.VpnName))
@@ -301,6 +320,26 @@ public partial class MainWindow : Window
             if (settings.NotifyNewApps && DateTime.UtcNow > seedUntil)
                 RaiseNotice("Neues Programm im Internet", $"{name} sendet zum ersten Mal Daten. Klicken, um es zu drosseln oder zu sperren.", name);
         }
+    }
+
+    readonly UploadWatch uploadWatch = new();
+
+    void CheckUploads(IEnumerable<string> sending, IReadOnlyDictionary<(string Name, bool Up), long> traffic)
+    {
+        if (settings.UploadAlarmMB <= 0) return;
+        foreach (var name in sending)
+        {
+            if (settings.UploadAlarmOff.Contains(name)) continue;
+            if (uploadWatch.Add(name, traffic.GetValueOrDefault((name, true)), DateTime.Now, settings.UploadAlarmMB * 1_000_000L) is { } bytes)
+                RaiseNotice("Auffällig viel Upload", $"{name} hat in den letzten 10 Minuten {AppRow.FormatBytes(bytes)} hochgeladen. Klicken, um es zu drosseln, zu sperren oder die Warnung abzuschalten.", name);
+        }
+    }
+
+    void UploadAlarm_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (UploadAlarmBox.SelectedItem is not ComboBoxItem { Tag: string mb }) return;
+        settings.UploadAlarmMB = int.Parse(mb);
+        ScheduleSave();
     }
 
     /// <summary>Datenlimits prüfen: Status anzeigen, bei 80 %/100 % melden, bei Bedarf sperren.</summary>
@@ -379,8 +418,22 @@ public partial class MainWindow : Window
         {
             MessageBox.Show(this, $"Der VPN konnte nicht eingerichtet werden:\n{ex.Message}", "FlowCap", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
+        ApplyDnsTunnel();
         UpdateVpnStatus();
     }
+
+    void Vpn_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is not (nameof(VpnEntry.KillSwitch) or nameof(VpnEntry.DnsThroughTunnel))) return;
+        if (e.PropertyName == nameof(VpnEntry.DnsThroughTunnel)) ApplyDnsTunnel();
+        ScheduleSave();
+    }
+
+    // Nur ein Tunnel kann DNS übernehmen: der erste aktive mit DNS-Server in der Config
+    void ApplyDnsTunnel() => throttler.SetDnsTunnel(settings.Vpns
+        .Where(v => v.DnsThroughTunnel && tunnels.ContainsKey(v.Name))
+        .Select(v => tunnels[v.Name])
+        .FirstOrDefault(t => t.DnsServer is not null));
 
     /// <summary>Zustände anzeigen und bei Verbindungsverlust den Kill-Switch auslösen.</summary>
     void UpdateVpnStatus()
@@ -464,7 +517,7 @@ public partial class MainWindow : Window
             try
             {
                 var entry = VpnEntry.Create(name, System.IO.File.ReadAllText(path));
-                entry.PropertyChanged += (_, ev) => { if (ev.PropertyName == nameof(VpnEntry.KillSwitch)) ScheduleSave(); };
+                entry.PropertyChanged += Vpn_PropertyChanged;
                 settings.Vpns.Add(entry);
                 VpnChoices.Add(name);
                 added.Add(name);
@@ -721,6 +774,7 @@ public partial class MainWindow : Window
         try
         {
             usage.Save();
+            pingLog.Save();
         }
         catch (Exception e) when (e is System.IO.IOException or UnauthorizedAccessException)
         {
@@ -791,16 +845,44 @@ public partial class MainWindow : Window
         row.UsageToday = $"↓ {AppRow.FormatBytes(down)}   ↑ {AppRow.FormatBytes(up)}";
 
         var conns = throttler.Ports.ConnectionsOf(row.Name).Distinct().Take(50).ToList();
+        var blocked = settings.BlockedTargets.GetValueOrDefault(row.Name) ?? [];
+        var geo = GeoIp.Current;
+        string Country(IPAddress ip) => geo?.CountryOf(ip) is { } cc ? GeoIp.CountryName(cc) : "";
+        ImageSource? Flag(IPAddress ip) => geo?.CountryOf(ip) is { } cc ? GeoIp.FlagOf(cc) : null;
         foreach (var ip in conns.Select(c => c.Remote).Distinct()) ResolveHost(ip);
+        // Gesperrte Ziele bleiben sichtbar, auch ohne offene Verbindung – sonst könnte man sie nicht wieder freigeben
         var desired = conns
-            .Select(c => new ConnRow(hostNames.GetValueOrDefault(c.Remote) ?? c.Remote.ToString(), $"{Endpoint(c)} · {c.State}"))
+            .Where(c => !blocked.Contains(c.Remote.ToString()))
+            .Select(c => new ConnRow(hostNames.GetValueOrDefault(c.Remote) ?? c.Remote.ToString(), $"{Endpoint(c)} · {c.State}", Country(c.Remote), c.Remote.ToString(), false, Flag(c.Remote)))
+            .Concat(blocked.Select(ip => IPAddress.TryParse(ip, out var a)
+                ? new ConnRow(hostNames.GetValueOrDefault(a) ?? ip, $"{ip} · gesperrt", Country(a), ip, true, Flag(a))
+                : new ConnRow(ip, "gesperrt", "", ip, true)))
             .Distinct()
-            .OrderBy(c => c.Host, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(c => c.Blocked)
+            .ThenBy(c => c.Host, StringComparer.OrdinalIgnoreCase)
             .ToList();
         CollectionSync.SyncTo(connRows, desired);
-        ConnHeader.Text = $"VERBINDUNGEN ({desired.Count})";
+        ConnHeader.Text = $"VERBINDUNGEN ({desired.Count(c => !c.Blocked)})";
         ConnEmpty.Visibility = desired.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        var countries = desired.Where(c => !c.Blocked && c.Country != "").GroupBy(c => c.Country).OrderByDescending(g => g.Count()).ToList();
+        ConnCountries.Text = countries.Count == 0 ? "" : "Länder: " + string.Join(", ", countries.Select(g => $"{g.Key} ({g.Count()})"));
+        ConnCountries.Visibility = countries.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
+
+    void ToggleTarget_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: ConnRow conn } || AppList.SelectedItem is not AppRow row) return;
+        if (!settings.BlockedTargets.TryGetValue(row.Name, out var set)) settings.BlockedTargets[row.Name] = set = [];
+        if (conn.Blocked) set.Remove(conn.Ip);
+        else set.Add(conn.Ip);
+        if (set.Count == 0) settings.BlockedTargets.Remove(row.Name);
+        ApplyBlockedTargets();
+        ScheduleSave();
+        UpdateDetail();
+    }
+
+    void ApplyBlockedTargets() => throttler.SetBlockedTargets(settings.BlockedTargets.ToDictionary(
+        kv => kv.Key, kv => kv.Value.Select(ip => IPAddress.TryParse(ip, out var a) ? a : null).OfType<IPAddress>().ToHashSet()));
 
     static string Endpoint(Connection c) =>
         c.Remote.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 ? $"[{c.Remote}]:{c.RemotePort}" : $"{c.Remote}:{c.RemotePort}";
@@ -844,6 +926,7 @@ public partial class MainWindow : Window
         UsageView.Visibility = Show(UsageTab.IsChecked == true);
         SpeedView.Visibility = Show(SpeedTab.IsChecked == true);
         PingView.Visibility = Show(PingTab.IsChecked == true);
+        if (PingTab.IsChecked == true) RefreshPingHistory();
         if (UsageTab.IsChecked == true) RefreshUsage();
     }
 
@@ -858,10 +941,45 @@ public partial class MainWindow : Window
         pinging = true;
         var ms = await SpeedTest.PingOnceAsync();
         PingText.Text = ms is { } v ? $"{v:0} ms" : "keine Antwort";
+        pingLog.Add(DateTime.Now, ms);
         pinging = false;
     }
 
     CancellationTokenSource? pingCts;
+    readonly PingLog pingLog = PingLog.Load();
+
+    void PingHistory_Changed(object sender, RoutedEventArgs e)
+    {
+        if (PingHistory is not null) RefreshPingHistory();
+    }
+
+    void RefreshPingHistory()
+    {
+        // 24 Std. in 5-Minuten-, 7 Tage in Stunden-, 30 Tage in 6-Stunden-Abschnitten
+        var (step, count) = PingHistMonth.IsChecked == true ? (TimeSpan.FromHours(6), 120)
+            : PingHistWeek.IsChecked == true ? (TimeSpan.FromHours(1), 168)
+            : (PingLog.BucketSize, 288);
+        var now = DateTime.Now;
+        var end = new DateTime(now.Ticks - now.Ticks % step.Ticks) + step;
+        var parts = pingLog.Range(end - step * count, step, count);
+
+        PingHistory.SampleSeconds = step.TotalSeconds;
+        PingHistory.EndTime = end - step;
+        PingHistory.Down = parts.Select(p => p?.Avg ?? double.NaN).ToArray();
+        PingHistory.Up = parts.Select(p => p?.Max ?? double.NaN).ToArray();
+        PingHistory.Lost = parts.Select(p => p is { LossPercent: >= 2 }).ToArray();
+
+        var measured = parts.OfType<PingBucket>().ToList();
+        if (measured.Count == 0)
+        {
+            PingHistorySummary.Text = "Noch keine Messungen in diesem Zeitraum.";
+            return;
+        }
+        var all = PingBucket.Merge(end, measured);
+        var worst = measured.OrderByDescending(p => p.LossPercent).ThenByDescending(p => p.Avg ?? 0).First();
+        PingHistorySummary.Text = $"Ø {all.Avg:0} ms · Max {all.Max:0} ms · {all.LossPercent:0.#} % Verlust · " +
+            $"schlechtester Abschnitt {worst.Start:dd.MM. HH:mm}: Ø {worst.Avg:0} ms, {worst.LossPercent:0.#} % Verlust";
+    }
 
     async void PingTest_Click(object sender, RoutedEventArgs e)
     {
@@ -1013,7 +1131,7 @@ public partial class MainWindow : Window
         var max = Math.Max(1, totals.Values.Select(t => t.Down + t.Up).DefaultIfEmpty(0).Max());
         UsageList.ItemsSource = totals
             .OrderByDescending(t => t.Value.Down + t.Value.Up)
-            .Select(t => new UsageRow(t.Key, icons.GetValueOrDefault(t.Key),
+            .Select(t => new UsageRow(t.Key, icons.TryGetValue(t.Key, out var icon) ? icon : icons[t.Key] = IconFor([], t.Key),
                 AppRow.FormatBytes(t.Value.Down), AppRow.FormatBytes(t.Value.Up), AppRow.FormatBytes(t.Value.Down + t.Value.Up),
                 (double)t.Value.Down / max, (double)(t.Value.Down + t.Value.Up) / max))
             .ToList();
@@ -1357,12 +1475,14 @@ public partial class MainWindow : Window
 
     // ---------- Icons ----------
 
-    static ImageSource? IconFor(Process[] procs, string name)
+    // Pfad merken, damit auch beendete Programme (Verbrauch) ihr Icon behalten
+    ImageSource? IconFor(Process[] procs, string name)
     {
-        foreach (var p in procs.Where(p => p.ProcessName == name))
+        var paths = procs.Where(p => p.ProcessName == name).Select(p => ImagePath(p.Id)).OfType<string>().ToList();
+        if (paths.Count > 0) settings.AppPaths[name] = paths[0];
+        else if (settings.AppPaths.TryGetValue(name, out var known)) paths.Add(known);
+        foreach (var path in paths)
         {
-            var path = ImagePath(p.Id);
-            if (path is null) continue;
             try
             {
                 using var icon = System.Drawing.Icon.ExtractAssociatedIcon(path);
@@ -1371,7 +1491,7 @@ public partial class MainWindow : Window
                 src.Freeze();
                 return src;
             }
-            catch (Exception e) when (e is System.IO.IOException or ArgumentException or UnauthorizedAccessException)
+            catch (Exception e) when (e is System.IO.IOException or ArgumentException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
             {
             }
         }

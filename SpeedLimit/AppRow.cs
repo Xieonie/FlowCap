@@ -27,6 +27,10 @@ public sealed class AppRow(string name, ImageSource? icon, Limit limit, Action<A
     string usageToday = "";
 
     public string Name { get; } = name;
+    /// <summary>Anfangsbuchstabe als Ersatz-Icon (Dienste, Konsolenprogramme, System).</summary>
+    public string Initial => Initials(Name);
+
+    public static string Initials(string name) => name.Length > 0 ? char.ToUpperInvariant(name[0]).ToString() : "?";
     public ImageSource? Icon { get; } = icon;
 
     /// <summary>Aktuelle Rate in KB/s.</summary>
@@ -144,6 +148,10 @@ public sealed class AppRow(string name, ImageSource? icon, Limit limit, Action<A
     }
 
     public bool IsPriority { get => priority; set { priority = value; Notify(); } }
+
+    bool uploadAlarmOff;
+    /// <summary>Keine Warnung bei viel Upload (z. B. Streaming, Backups).</summary>
+    public bool UploadAlarmOff { get => uploadAlarmOff; set { uploadAlarmOff = value; Notify(); } }
 
     public DataCap? Cap => capEnabled ? new DataCap(capBytes, capMonthly, capBlock) : null;
     public bool CapEnabled { get => capEnabled; set { capEnabled = value; CapChanged(); } }

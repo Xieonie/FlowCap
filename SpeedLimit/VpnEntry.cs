@@ -18,6 +18,10 @@ public sealed class VpnEntry : INotifyPropertyChanged
     /// <summary>Verliert der Tunnel die Verbindung (oder wird FlowCap beendet), die zugewiesenen Programme beenden.</summary>
     public bool KillSwitch { get => killSwitch; set { killSwitch = value; Notify(); } }
 
+    bool dnsThroughTunnel = true;
+    /// <summary>DNS-Anfragen von Windows über diesen Tunnel an den DNS-Server der Config schicken (solange er verbunden ist).</summary>
+    public bool DnsThroughTunnel { get => dnsThroughTunnel; set { dnsThroughTunnel = value; Notify(); } }
+
     [JsonIgnore] public string Status { get => status; set { if (status != value) { status = value; Notify(); } } }
 
     /// <summary>Prüft die Config und legt sie verschlüsselt ab; wirft <see cref="FormatException"/> bei ungültiger Config.</summary>

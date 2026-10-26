@@ -26,6 +26,11 @@ public sealed class Settings
     public Dictionary<string, DataCap> DataCaps { get; set; } = [];
     /// <summary>Melden, wenn ein Programm zum ersten Mal Daten sendet.</summary>
     public bool NotifyNewApps { get; set; } = true;
+    /// <summary>Warnschwelle für Upload in 10 Minuten in MB; 0 = aus.</summary>
+    public int UploadAlarmMB { get; set; } = 250;
+    public HashSet<string> UploadAlarmOff { get; set; } = [];
+    /// <summary>Programm → gesperrte Ziel-IP-Adressen.</summary>
+    public Dictionary<string, HashSet<string>> BlockedTargets { get; set; } = [];
     /// <summary>Programme, die schon einmal im Internet waren; null = noch nie erfasst (erste Erfassung ohne Meldungen).</summary>
     public HashSet<string>? KnownApps { get; set; }
 
@@ -57,6 +62,8 @@ public sealed class Settings
     public System.Collections.ObjectModel.ObservableCollection<SpeedResult> SpeedTests { get; set; } = [];
     public string PingTarget { get; set; } = "Cloudflare (1.1.1.1)";
     public bool AutoUpdate { get; set; } = true;
+    /// <summary>Zuletzt gesehener Exe-Pfad je Programm – für Icons von Programmen, die gerade nicht laufen.</summary>
+    public Dictionary<string, string> AppPaths { get; set; } = [];
     public DateTime LastUpdateCheck { get; set; }
 
     /// <summary>Live-Werte als Profil-Kopie.</summary>

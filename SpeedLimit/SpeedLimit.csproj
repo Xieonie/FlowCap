@@ -12,7 +12,7 @@
     <ApplicationIcon>flowcap.ico</ApplicationIcon>
     <Product>FlowCap</Product>
     <AssemblyName>FlowCap</AssemblyName>
-    <Version>1.2.0</Version>
+    <Version>1.3.0</Version>
     <!-- Fluent-Theme (ThemeMode) ist in WPF noch als experimentell markiert -->
     <NoWarn>$(NoWarn);WPF0001</NoWarn>
   </PropertyGroup>
@@ -25,6 +25,10 @@
 
   <ItemGroup>
     <Resource Include="flowcap.ico" />
+    <!-- DB-IP „IP to Country Lite“ (CC BY 4.0), monatlich neu: download.db-ip.com/free/dbip-country-lite-JJJJ-MM.csv.gz -->
+    <EmbeddedResource Include="Data\dbip-country-lite.csv.gz" LogicalName="SpeedLimit.Data.dbip-country-lite.csv.gz" />
+    <!-- Länderflaggen 40 px von flagcdn.com (gemeinfrei): flagcdn.com/w40.zip -->
+    <EmbeddedResource Include="Data\flags-w40.zip" LogicalName="SpeedLimit.Data.flags-w40.zip" />
   </ItemGroup>
 
   <ItemGroup>

@@ -115,6 +115,61 @@ public class PacketInfoTests
         return Sum(l4, pseudo) == 0xFFFF;
     }
 
+    // IPv6-TCP: fd00::2 → 2001:4860::8888, 20 Byte TCP-Kopf + Nutzdaten
+    static byte[] V6Tcp(int payload)
+    {
+        var p = new byte[60 + payload];
+        p[0] = 0x60;
+        p[4] = (byte)((20 + payload) >> 8); p[5] = (byte)(20 + payload);
+        p[6] = 6; p[7] = 64;
+        p[8] = 0xfd; p[23] = 2;
+        p[24] = 0x20; p[25] = 0x01; p[26] = 0x48; p[27] = 0x60; p[38] = 0x88; p[39] = 0x88;
+        p[40] = 0xC0; p[41] = 0x01; p[43] = 80;   // Ports 49153 → 80
+        p[52] = 0x50; p[53] = 0x18;               // Kopf 20 Byte, ACK + PSH
+        for (var i = 60; i < p.Length; i++) p[i] = (byte)i;
+        return p;
+    }
+
+    static bool V6ChecksumValid(byte[] p)
+    {
+        uint s = 0;
+        for (var i = 8; i < 40; i += 2) s += (uint)((p[i] << 8) | p[i + 1]);
+        s += 6;
+        var l4 = p.AsSpan(40);
+        s += (uint)l4.Length;
+        for (var i = 0; i + 1 < l4.Length; i += 2) s += (uint)((l4[i] << 8) | l4[i + 1]);
+        if (l4.Length % 2 == 1) s += (uint)l4[^1] << 8;
+        while (s >> 16 != 0) s = (s & 0xFFFF) + (s >> 16);
+        return s == 0xFFFF;
+    }
+
+    [Fact]
+    public void V6_RewriteFixAndSegment()
+    {
+        var p = V6Tcp(3000);
+        Assert.True(PacketInfo.TryParse(p, out var info));
+        Assert.Equal("2001:4860::8888", info.RemoteAddress(p, outbound: true).ToString());
+
+        PacketInfo.SetSource(p, System.Net.IPAddress.Parse("fd00::99").GetAddressBytes());
+        PacketInfo.FixChecksums(p);
+        Assert.True(V6ChecksumValid(p));
+        Assert.Equal("fd00::99", new System.Net.IPAddress(info.Source(p)).ToString());
+
+        var parts = PacketInfo.Segment(p, 1420);
+        Assert.Equal(3, parts.Count);                                  // 1360 + 1360 + 280 Nutzdaten
+        Assert.All(parts, s => Assert.True(s.Length <= 1420 && V6ChecksumValid(s) && ((s[4] << 8) | s[5]) == s.Length - 40));
+        Assert.Equal(p[60..], parts.SelectMany(s => s[60..]).ToArray());
+    }
+
+    [Fact]
+    public void RemoteAddress_IsDestinationWhenSendingAndSourceWhenReceiving()
+    {
+        var p = Syn(); // 192.168.0.2 → 1.1.1.1
+        Assert.True(PacketInfo.TryParse(p, out var info));
+        Assert.Equal("1.1.1.1", info.RemoteAddress(p, outbound: true).ToString());
+        Assert.Equal("192.168.0.2", info.RemoteAddress(p, outbound: false).ToString());
+    }
+
     [Fact]
     public void AckIsNotSyn()
     {

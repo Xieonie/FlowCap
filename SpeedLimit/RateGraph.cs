@@ -40,6 +40,16 @@ public sealed class RateGraph : FrameworkElement
     public static readonly DependencyProperty LostProperty = DependencyProperty.Register(
         nameof(Lost), typeof(IReadOnlyList<bool>), typeof(RateGraph), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
 
+    public static readonly DependencyProperty SampleSecondsProperty = DependencyProperty.Register(
+        nameof(SampleSeconds), typeof(double), typeof(RateGraph), new FrameworkPropertyMetadata(1.0, FrameworkPropertyMetadataOptions.AffectsRender));
+    public static readonly DependencyProperty EndTimeProperty = DependencyProperty.Register(
+        nameof(EndTime), typeof(DateTime?), typeof(RateGraph), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    /// <summary>Abstand der Messpunkte in Sekunden (für die Zeitachse).</summary>
+    public double SampleSeconds { get => (double)GetValue(SampleSecondsProperty); set => SetValue(SampleSecondsProperty, value); }
+    /// <summary>Zeitpunkt des letzten Messpunkts; leer = jetzt.</summary>
+    public DateTime? EndTime { get => (DateTime?)GetValue(EndTimeProperty); set => SetValue(EndTimeProperty, value); }
+
     /// <summary>Einheit der Skala (z. B. "ms"); leer = Datenrate in KB/s.</summary>
     public string? Unit { get => (string?)GetValue(UnitProperty); set => SetValue(UnitProperty, value); }
     /// <summary>Pro Messpunkt: true = verloren, wird als rote Markierung gezeichnet.</summary>
@@ -57,7 +67,7 @@ public sealed class RateGraph : FrameworkElement
         if (w < 2 || h < 2) return;
         var down = Down ?? [];
         var up = Up ?? [];
-        var peak = down.Concat(up).DefaultIfEmpty(0).Max();
+        var peak = down.Concat(up).Where(v => !double.IsNaN(v)).DefaultIfEmpty(0).Max();
         var max = Math.Max(peak, ShowGrid ? 10 : 1) * 1.2; // etwas Luft nach oben
         var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
 
@@ -71,10 +81,12 @@ public sealed class RateGraph : FrameworkElement
             }
             dc.DrawText(Text(Unit is null ? AppRow.FormatRate(max) : $"{max:0} {Unit}", dpi), new Point(0, 4));
             // Zeitachse: Uhrzeiten wie bei GlassWire, ältester Punkt links
-            var n = Math.Max(down.Count, 2);
+            var span = (Math.Max(down.Count, 2) - 1) * SampleSeconds;
+            var format = span > 86400 ? "dd.MM. HH:mm" : span > 3600 ? "HH:mm" : "HH:mm:ss";
+            var end = EndTime ?? DateTime.Now;
             for (var k = 0; k <= 4; k++)
             {
-                var label = Text(DateTime.Now.AddSeconds(-(n - 1) * (1 - k / 4.0)).ToString("HH:mm:ss"), dpi);
+                var label = Text(end.AddSeconds(-span * (1 - k / 4.0)).ToString(format), dpi);
                 var x = Math.Clamp(w * k / 4 - label.Width / 2, 0, w - label.Width);
                 dc.DrawText(label, new Point(x, h + 6));
             }
@@ -93,20 +105,31 @@ public sealed class RateGraph : FrameworkElement
     FormattedText Text(string s, double dpi) =>
         new(s, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 11, LabelBrush, dpi);
 
+    // NaN = keine Messung: die Kurve wird dort unterbrochen statt auf 0 zu fallen
     static void DrawSeries(DrawingContext dc, IReadOnlyList<double> data, double max, double w, double h, Brush fill, Pen pen)
     {
         if (data.Count < 2) return;
         var step = w / (data.Count - 1);
-        var pts = new Point[data.Count];
-        for (var i = 0; i < pts.Length; i++) pts[i] = new(i * step, h - Math.Min(data[i] / max, 1) * (h - 1));
+        for (var i = 0; i < data.Count;)
+        {
+            if (double.IsNaN(data[i])) { i++; continue; }
+            var run = new List<Point>();
+            for (; i < data.Count && !double.IsNaN(data[i]); i++) run.Add(new(i * step, h - Math.Min(data[i] / max, 1) * (h - 1)));
+            if (run.Count == 1) run.Add(run[0] with { X = run[0].X + Math.Max(step / 2, 1) }); // Einzelwert als kurzer Strich
+            DrawRun(dc, [.. run], h, fill, pen);
+        }
+    }
+
+    static void DrawRun(DrawingContext dc, Point[] pts, double h, Brush fill, Pen pen)
+    {
 
         var area = new StreamGeometry();
         using (var c = area.Open())
         {
-            c.BeginFigure(new Point(0, h), isFilled: true, isClosed: true);
+            c.BeginFigure(new Point(pts[0].X, h), isFilled: true, isClosed: true);
             c.LineTo(pts[0], false, false);
             Smooth(c, pts, h, stroked: false);
-            c.LineTo(new Point(w, h), false, false);
+            c.LineTo(new Point(pts[^1].X, h), false, false);
         }
         var line = new StreamGeometry();
         using (var c = line.Open())

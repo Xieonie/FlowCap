@@ -6,7 +6,8 @@ namespace SpeedLimit;
 /// <summary>Die Teile einer WireGuard-.conf, die FlowCap braucht ([Interface] + erster [Peer]).</summary>
 public sealed record WireGuardConfig(
     byte[] PrivateKey, IPAddress Address, byte[] PeerPublicKey, byte[] PresharedKey,
-    string EndpointHost, int EndpointPort, int PersistentKeepalive, int Mtu)
+    string EndpointHost, int EndpointPort, int PersistentKeepalive, int Mtu,
+    IPAddress? Address6 = null, IPAddress? Dns = null, IPAddress? Dns6 = null)
 {
     /// <summary>Liest eine .conf; wirft <see cref="FormatException"/> mit verständlicher Meldung bei Fehlern.</summary>
     public static WireGuardConfig Parse(string text)
@@ -33,11 +34,17 @@ public sealed record WireGuardConfig(
         string Get(string key) => values.TryGetValue(key, out var v) && v.Length > 0
             ? v : throw new FormatException($"In der Config fehlt „{key.Split('.')[1]}“ im Abschnitt [{key.Split('.')[0]}].");
 
-        var address = Get("interface.Address").Split(',')
+        static List<IPAddress> Ips(string list) => list.Split(',')
             .Select(a => a.Trim().Split('/')[0])
             .Select(a => IPAddress.TryParse(a, out var ip) ? ip : null)
-            .FirstOrDefault(ip => ip?.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+            .OfType<IPAddress>().ToList();
+        static IPAddress? V4(List<IPAddress> ips) => ips.FirstOrDefault(ip => ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
+        static IPAddress? V6(List<IPAddress> ips) => ips.FirstOrDefault(ip => ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6);
+
+        var addresses = Ips(Get("interface.Address"));
+        var address = V4(addresses)
             ?? throw new FormatException("Die Config hat keine IPv4-Adresse unter [Interface] Address – FlowCap braucht eine.");
+        var dns = Ips(values.GetValueOrDefault("interface.DNS") ?? "");
 
         var endpoint = Get("peer.Endpoint");
         var colon = endpoint.LastIndexOf(':');
@@ -52,7 +59,8 @@ public sealed record WireGuardConfig(
             endpoint[..colon].Trim('[', ']'),
             port,
             values.TryGetValue("peer.PersistentKeepalive", out var ka) && int.TryParse(ka, out var k) ? k : 0,
-            values.TryGetValue("interface.MTU", out var mtu) && int.TryParse(mtu, out var m) ? m : 1420);
+            values.TryGetValue("interface.MTU", out var mtu) && int.TryParse(mtu, out var m) ? m : 1420,
+            V6(addresses), V4(dns), V6(dns));
     }
 
     static byte[] Key(string base64, string name)

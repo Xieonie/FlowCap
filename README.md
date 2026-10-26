@@ -2,6 +2,16 @@
 
 Bandbreite pro Programm unter Windows steuern: alle laufenden Programme mit Live-Download/-Upload sehen, einzeln drosseln oder sperren, über einen Proxy oder einen WireGuard-VPN leiten – nur dieses eine Programm, alles andere bleibt direkt.
 
+![Live-Ansicht](docs/screenshots/live.png)
+
+| Datenverbrauch | Pingtest |
+|---|---|
+| ![Datenverbrauch](docs/screenshots/verbrauch.png) | ![Pingtest](docs/screenshots/ping.png) |
+| **Speedtest** | **Einstellungen** |
+| ![Speedtest](docs/screenshots/speedtest.png) | ![Einstellungen](docs/screenshots/einstellungen.png) |
+
+Neu erstellen: FlowCap öffnen, dann in einer Administrator-PowerShell `tools\screenshots.ps1` ausführen.
+
 ## Funktionen
 
 - **Live-Dashboard** – Verlaufsgraph, Tacho, Liste aller Programme mit Mini-Verlauf, Ping-Anzeige
@@ -13,6 +23,8 @@ Bandbreite pro Programm unter Windows steuern: alle laufenden Programme mit Live
 - **Proxy pro Programm** – SOCKS5 oder HTTP-CONNECT, auch für Programme ohne Proxy-Unterstützung
 - **VPN pro Programm (WireGuard)** – `.conf` laden, Programm zuweisen; TCP und UDP laufen durch den Tunnel, mit Kill-Switch
 - **Speedtest** – Ping, Jitter, Download und Upload (über Cloudflare)
+- **Pingtest** – Dauerping zu wählbarem Ziel mit Verlauf, Min/Mittel/Max, Jitter und Paketverlust
+- **Automatische Updates** – über die GitHub-Releases, Installation mit einem Klick
 - **Tray-Schnellmenü, Benachrichtigungen, Autostart**
 
 ## Voraussetzungen
